@@ -15,7 +15,7 @@ radio = wifi.radio
 
 # ---------- CONFIG ----------
 SSID = "Capstone Test Wifi!"
-PASSWORD = "feather123"   # ≥8 chars
+PASSWORD = "aaron123"   # ≥8 chars
 ROTATION = 0              # 0/90/180/270
 TEXT_COLOR = 0xFFFFFF
 BG_COLOR = 0x000000
