@@ -143,6 +143,17 @@ def html_page(message):
         "<textarea name=\"t\" rows=\"6\" placeholder=\"Type here...\"></textarea>"
         "<button type=\"submit\">Show</button>"
         "</form>"
+        "<hr>"
+        "<h3>Background color</h3>"
+        "<form method=\"POST\" action=\"/color\">"
+        "<div style=\"display:flex;gap:.5rem;flex-wrap:wrap\">"
+        "<button name=\"color\" value=\"#00FF00\" type=\"submit\" style=\"background:#00FF00\">Green</button>"
+        "<button name=\"color\" value=\"#AA0088\" type=\"submit\" style=\"background:#AA0088;color:#fff\">Purple</button>"
+        "<button name=\"color\" value=\"#000000\" type=\"submit\" style=\"background:#000;color:#fff\">Black</button>"
+        "<button name=\"color\" value=\"#FFFFFF\" type=\"submit\" style=\"background:#fff\">White</button>"
+        "</div>"
+        "<div>Or hex: <input name=\"hex\" placeholder=\"#RRGGBB or RRGGBB\"> <button type=\"submit\">Set</button></div>"
+        "</form>"
         "<p>Or GET: <code>/?t=Hello%20World</code></p>"
         "<p>Current: <code>" + message.replace("<", "&lt;").replace(">", "&gt;") + "</code></p>"
         "</body></html>"
@@ -166,6 +177,40 @@ def submit(request: Request):
     msg = form.get("t") if form else None
     if msg is not None:
         set_text(url_decode(msg))
+    return Redirect(request, "/")
+
+
+def parse_hex_color(s):
+    if not s:
+        return None
+    s = s.strip()
+    if s.startswith("#"):
+        s = s[1:]
+    if len(s) != 6:
+        return None
+    try:
+        return int(s, 16) & 0xFFFFFF
+    except Exception:
+        return None
+
+
+@server.route("/color", POST)
+def set_color(request: Request):
+    form = request.form_data
+    color_val = None
+    if form:
+        btn = form.get("color")
+        hex_in = form.get("hex")
+        if btn:
+            color_val = parse_hex_color(url_decode(btn))
+        if color_val is None and hex_in:
+            color_val = parse_hex_color(url_decode(hex_in))
+
+    if color_val is not None:
+        try:
+            bg_palette[0] = color_val
+        except Exception:
+            pass
     return Redirect(request, "/")
 
 
