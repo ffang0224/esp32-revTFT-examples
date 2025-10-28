@@ -10,9 +10,12 @@ from adafruit_display_text import label
 import wifi
 import socketpool
 
+# Use the WiFi radio singleton
+radio = wifi.radio
+
 # ---------- CONFIG ----------
 SSID = "Capstone Test Wifi!"
-PASSWORD = "feather123"   # ≥8 chars; set "" for open
+PASSWORD = "aaron123"   # ≥8 chars; set "" for open
 ROTATION = 0          # 0/90/180/270 to taste, probably 0 or 180 is better
 TEXT_COLOR = 0xFFFFFF
 BG_COLOR = 0x000000
@@ -81,11 +84,11 @@ show_lines(["Starting AP…"])
 
 # 3) Wi-Fi AP
 if PASSWORD:
-    wifi.radio.start_ap(SSID, PASSWORD)
+    radio.start_ap(SSID, PASSWORD)
 else:
-    wifi.radio.start_ap(SSID)
+    radio.start_ap(SSID)
 time.sleep(0.4)
-ip = str(wifi.radio.ipv4_address_ap)
+ip = str(radio.ipv4_address_ap)
 
 show_lines([
     "Connect to:",
@@ -96,10 +99,13 @@ show_lines([
 ])
 
 # 4) Tiny HTTP server (no extra HTTP libs)
-pool = socketpool.SocketPool(wifi.radio)
+pool = socketpool.SocketPool(radio)
 srv = pool.socket(pool.AF_INET, pool.SOCK_STREAM)
 srv.settimeout(0)
-srv.bind((ip, 80))
+# Socket options
+srv.setsockopt(pool.SOL_SOCKET, pool.SO_REUSEADDR, 1)
+# Bind to all interfaces (empty string) on port 80
+srv.bind(("", 80))
 srv.listen(1)
 
 HTML_FORM = f"""\
@@ -124,7 +130,7 @@ code{{background:#eee;padding:.2rem .4rem;border-radius:.25rem}}
 </body></html>
 """
 
-HTML_REDIRECT = "HTTP/1.1 303 See Other\r\nLocation: /\r\nConnection: close\r\n\r\n"
+HTML_REDIRECT = "HTTP/1.1 303 See Other\r\nLocation: /\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
 
 def url_decode(s: str) -> str:
     out, i = [], 0
@@ -140,6 +146,19 @@ def url_decode(s: str) -> str:
         else:
             out.append(c); i += 1
     return ''.join(out)
+
+def add_content_length(content: str) -> str:
+    """Add Content-Length header to HTTP response"""
+    lines = content.split("\r\n")
+    # Find the blank line separating headers from body
+    for i, line in enumerate(lines):
+        if line == "":
+            body = "\r\n".join(lines[i+1:])
+            body_len = len(body.encode("utf-8"))
+            # Insert Content-Length before blank line
+            lines.insert(i, f"Content-Length: {body_len}")
+            return "\r\n".join(lines)
+    return content
 
 def handle_request(raw: bytes):
     if not raw:
@@ -188,13 +207,25 @@ while True:
         time.sleep(0.05)
         continue
     try:
-        client.settimeout(2)
-        req = client.recv(2048)  # small pages fit
-        resp = handle_request(req)
-        client.send(resp.encode("utf-8"))
-    except Exception:
+        client.settimeout(5)
+        req = client.recv(2048)
+        if req:
+            resp = handle_request(req)
+            # Add Content-Length header for proper HTTP
+            resp = add_content_length(resp)
+            # Send response in chunks if needed
+            resp_bytes = resp.encode("utf-8")
+            sent = 0
+            while sent < len(resp_bytes):
+                chunk = client.send(resp_bytes[sent:])
+                if chunk == 0:
+                    break
+                sent += chunk
+    except Exception as e:
+        # Ignore errors, just close the connection
         pass
-    try:
-        client.close()
-    except Exception:
-        pass
+    finally:
+        try:
+            client.close()
+        except Exception:
+            pass
