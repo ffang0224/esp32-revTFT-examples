@@ -10,6 +10,8 @@ import {
   Platform,
   PermissionsAndroid,
   Alert,
+  ScrollView,
+  ActivityIndicator,
 } from "react-native";
 import {
   BleManager,
@@ -18,11 +20,15 @@ import {
   BleError,
 } from "react-native-ble-plx";
 import { Buffer } from "buffer";
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+import { generateText, POPULAR_MODELS } from "../../services/openrouter";
 
 const UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 const UART_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
 
 const manager = new BleManager();
+const API_KEY_STORAGE_KEY = "openrouter_api_key";
 
 export default function IndexScreen() {
   const [isScanning, setIsScanning] = useState(false);
@@ -32,6 +38,14 @@ export default function IndexScreen() {
   const [isConnecting, setIsConnecting] = useState(false);
   const [text, setText] = useState("Hello from Expo Router");
   const [color, setColor] = useState("#00FFFF");
+  
+  // OpenRouter state
+  const [apiKey, setApiKey] = useState("");
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [selectedModel, setSelectedModel] = useState(POPULAR_MODELS[0].id);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [showApiKeySection, setShowApiKeySection] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -41,6 +55,29 @@ export default function IndexScreen() {
           "android.permission.BLUETOOTH_SCAN" as any,
           "android.permission.BLUETOOTH_CONNECT" as any,
         ]);
+      }
+      
+      // Load API key from environment variable first, then from secure store
+      try {
+        // Check for environment variable (from .env file or app.config.js)
+        const envApiKey =
+          Constants.expoConfig?.extra?.openRouterApiKey ||
+          Constants.manifest?.extra?.openRouterApiKey ||
+          process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+        
+        if (envApiKey) {
+          setApiKey(envApiKey);
+          console.log("Loaded API key from environment variable");
+        } else {
+          // Fall back to secure store
+          const savedKey = await SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+          if (savedKey) {
+            setApiKey(savedKey);
+            console.log("Loaded API key from secure store");
+          }
+        }
+      } catch (e) {
+        console.log("Error loading API key:", e);
       }
     })();
 
@@ -203,82 +240,232 @@ export default function IndexScreen() {
     setUartRxChar(null);
   };
 
+  const saveApiKey = async () => {
+    if (!apiKeyInput.trim()) {
+      Alert.alert("Error", "Please enter an API key");
+      return;
+    }
+    try {
+      await SecureStore.setItemAsync(API_KEY_STORAGE_KEY, apiKeyInput.trim());
+      setApiKey(apiKeyInput.trim());
+      setShowApiKeySection(false);
+      Alert.alert("Success", "API key saved securely");
+    } catch (e: any) {
+      Alert.alert("Error", `Failed to save API key: ${e.message}`);
+    }
+  };
+
+  const generateAIText = async () => {
+    if (!apiKey) {
+      Alert.alert("API Key Required", "Please configure your OpenRouter API key first");
+      setShowApiKeySection(true);
+      return;
+    }
+
+    if (!aiPrompt.trim()) {
+      Alert.alert("Error", "Please enter a prompt");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const generated = await generateText(
+        apiKey,
+        aiPrompt,
+        selectedModel,
+        "You are a helpful assistant that generates short, concise messages suitable for display on a small badge screen. Keep responses brief and engaging."
+      );
+      setText(generated);
+      Alert.alert("Success", "Text generated! Review and send to badge.");
+    } catch (e: any) {
+      console.error("Generation error:", e);
+      Alert.alert("Error", e.message || "Failed to generate text");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   const deviceList = Object.values(devices);
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Fausto BLE Badge</Text>
-      <Text style={styles.label}>
-        Status:{" "}
-        {connectedDevice
-          ? `Connected to ${connectedDevice.name || connectedDevice.id}`
-          : isConnecting
-          ? "Connecting..."
-          : "Not connected"}
-      </Text>
+    <ScrollView style={styles.scrollContainer}>
+      <View style={styles.container}>
+        <Text style={styles.title}>Fausto BLE Badge</Text>
+        <Text style={styles.label}>
+          Status:{" "}
+          {connectedDevice
+            ? `Connected to ${connectedDevice.name || connectedDevice.id}`
+            : isConnecting
+            ? "Connecting..."
+            : "Not connected"}
+        </Text>
 
-      <View style={styles.row}>
-        <Button
-          title={isScanning ? "Scanning..." : "Scan for Badge"}
-          onPress={startScan}
-          disabled={isScanning || !!connectedDevice || isConnecting}
-        />
-        {connectedDevice && <Button title="Disconnect" onPress={disconnect} />}
-      </View>
+        <View style={styles.row}>
+          <Button
+            title={isScanning ? "Scanning..." : "Scan for Badge"}
+            onPress={startScan}
+            disabled={isScanning || !!connectedDevice || isConnecting}
+          />
+          {connectedDevice && <Button title="Disconnect" onPress={disconnect} />}
+        </View>
 
-      {!connectedDevice && (
-        <FlatList
-          data={deviceList}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.deviceItem}
-              onPress={() => connectToDevice(item)}
-              disabled={isConnecting}
-            >
-              <Text style={styles.deviceName}>
-                {item.name ||
-                  (item as any).localName ||
-                  "UART device (likely badge)"}
+        {!connectedDevice && (
+          <FlatList
+            data={deviceList}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.deviceItem}
+                onPress={() => connectToDevice(item)}
+                disabled={isConnecting}
+              >
+                <Text style={styles.deviceName}>
+                  {item.name ||
+                    (item as any).localName ||
+                    "UART device (likely badge)"}
+                </Text>
+                <Text style={styles.deviceId}>{item.id}</Text>
+              </TouchableOpacity>
+            )}
+            ListEmptyComponent={
+              <Text style={styles.hint}>
+                Tap "Scan for Badge". Only Nordic UART devices appear.
               </Text>
-              <Text style={styles.deviceId}>{item.id}</Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={
-            <Text style={styles.hint}>
-              Tap "Scan for Badge". Only Nordic UART devices appear.
-            </Text>
-          }
-        />
-      )}
+            }
+          />
+        )}
 
-      <Text style={styles.sectionTitle}>Send text</Text>
-      <TextInput
-        style={styles.input}
-        value={text}
-        onChangeText={setText}
-        placeholder="Text to show on badge"
-      />
-      <TextInput
-        style={styles.input}
-        value={color}
-        onChangeText={setColor}
-        placeholder="#RRGGBB color (e.g. #FF00FF)"
-        autoCapitalize="none"
-      />
-      <Button
-        title="Send to Badge"
-        onPress={sendText}
-        disabled={!connectedDevice || !uartRxChar}
-      />
-    </View>
+        {/* OpenRouter Configuration */}
+        <Text style={styles.sectionTitle}>OpenRouter AI</Text>
+        <TouchableOpacity
+          style={styles.toggleButton}
+          onPress={() => {
+            if (!showApiKeySection && apiKey) {
+              // When opening, load the saved key into input (will be masked)
+              setApiKeyInput(apiKey);
+            }
+            setShowApiKeySection(!showApiKeySection);
+          }}
+        >
+          <Text style={styles.toggleButtonText}>
+            {showApiKeySection ? "Hide" : "Show"} API Key Settings
+            {apiKey && " ✓"}
+          </Text>
+        </TouchableOpacity>
+
+        {showApiKeySection && (
+          <View style={styles.apiKeySection}>
+            <Text style={styles.label}>OpenRouter API Key</Text>
+            <TextInput
+              style={styles.input}
+              value={apiKeyInput}
+              onChangeText={setApiKeyInput}
+              placeholder="sk-or-v1-..."
+              secureTextEntry={true}
+              autoCapitalize="none"
+            />
+            <Button title="Save API Key" onPress={saveApiKey} />
+            {apiKey && (
+              <Button
+                title="Clear API Key"
+                onPress={async () => {
+                  try {
+                    await SecureStore.deleteItemAsync(API_KEY_STORAGE_KEY);
+                    setApiKey("");
+                    setApiKeyInput("");
+                    Alert.alert("Success", "API key cleared");
+                  } catch (e: any) {
+                    Alert.alert("Error", `Failed to clear API key: ${e.message}`);
+                  }
+                }}
+              />
+            )}
+            <Text style={styles.hint}>
+              Get your API key from{" "}
+              <Text style={styles.link}>openrouter.ai</Text>
+            </Text>
+          </View>
+        )}
+
+        {apiKey && (
+          <>
+            <Text style={styles.label}>AI Model</Text>
+            <FlatList
+              horizontal
+              data={POPULAR_MODELS}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.modelChip,
+                    selectedModel === item.id && styles.modelChipSelected,
+                  ]}
+                  onPress={() => setSelectedModel(item.id)}
+                >
+                  <Text
+                    style={[
+                      styles.modelChipText,
+                      selectedModel === item.id && styles.modelChipTextSelected,
+                    ]}
+                  >
+                    {item.name}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              showsHorizontalScrollIndicator={false}
+            />
+            <Text style={styles.label}>AI Prompt</Text>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={aiPrompt}
+              onChangeText={setAiPrompt}
+              placeholder="e.g., Generate a fun message about coffee"
+              multiline
+              numberOfLines={3}
+            />
+            <Button
+              title={isGenerating ? "Generating..." : "Generate Text with AI"}
+              onPress={generateAIText}
+              disabled={isGenerating || !apiKey}
+            />
+            {isGenerating && (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="small" />
+                <Text style={styles.hint}>Generating...</Text>
+              </View>
+            )}
+          </>
+        )}
+
+        <Text style={styles.sectionTitle}>Send text</Text>
+        <TextInput
+          style={styles.input}
+          value={text}
+          onChangeText={setText}
+          placeholder="Text to show on badge"
+        />
+        <TextInput
+          style={styles.input}
+          value={color}
+          onChangeText={setColor}
+          placeholder="#RRGGBB color (e.g. #FF00FF)"
+          autoCapitalize="none"
+        />
+        <Button
+          title="Send to Badge"
+          onPress={sendText}
+          disabled={!connectedDevice || !uartRxChar}
+        />
+      </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContainer: { flex: 1 },
   container: { flex: 1, padding: 20, paddingTop: 60, gap: 16 },
   title: { fontSize: 24, fontWeight: "700", marginBottom: 8 },
-  label: { fontSize: 14, marginBottom: 4 },
+  label: { fontSize: 14, marginBottom: 4, fontWeight: "500" },
   row: { flexDirection: "row", gap: 10, marginVertical: 8 },
   deviceItem: {
     padding: 10,
@@ -295,5 +482,57 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 10,
     marginVertical: 4,
+    backgroundColor: "#fff",
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: "top",
+  },
+  toggleButton: {
+    padding: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  toggleButtonText: {
+    textAlign: "center",
+    fontWeight: "600",
+  },
+  apiKeySection: {
+    padding: 12,
+    backgroundColor: "#f9f9f9",
+    borderRadius: 8,
+    marginVertical: 8,
+  },
+  link: {
+    color: "#007AFF",
+    textDecorationLine: "underline",
+  },
+  modelChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: "#e0e0e0",
+    marginRight: 8,
+    marginVertical: 4,
+  },
+  modelChipSelected: {
+    backgroundColor: "#007AFF",
+  },
+  modelChipText: {
+    fontSize: 12,
+    color: "#333",
+  },
+  modelChipTextSelected: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    marginVertical: 8,
   },
 });
+
