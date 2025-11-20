@@ -12,6 +12,7 @@ import {
   Alert,
   ScrollView,
   ActivityIndicator,
+  Linking,
 } from "react-native";
 import {
   BleManager,
@@ -49,12 +50,31 @@ export default function IndexScreen() {
 
   useEffect(() => {
     (async () => {
+      if (Constants.appOwnership === "expo") {
+        Alert.alert(
+          "Expo Go Detected",
+          "Bluetooth Low Energy (BLE) does NOT work in Expo Go. You must use a Development Build.\n\nRun 'npx expo run:android' or 'npx expo run:ios' to build the native app."
+        );
+      }
+
       if (Platform.OS === "android") {
-        await PermissionsAndroid.requestMultiple([
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          "android.permission.BLUETOOTH_SCAN" as any,
-          "android.permission.BLUETOOTH_CONNECT" as any,
-        ]);
+        try {
+          const granted = await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+            "android.permission.BLUETOOTH_SCAN" as any,
+            "android.permission.BLUETOOTH_CONNECT" as any,
+          ]);
+          console.log("Permissions:", granted);
+        } catch (e) {
+          console.log("Permission error:", e);
+        }
+      }
+
+      try {
+        const state = await manager.state();
+        console.log("BLE Manager State on Mount:", state);
+      } catch (e) {
+        console.log("Error checking BLE state:", e);
       }
       
       // Load API key from environment variable first, then from secure store
@@ -86,39 +106,102 @@ export default function IndexScreen() {
     };
   }, []);
 
-  const startScan = () => {
+  useEffect(() => {
+    const subscription = manager.onStateChange((state) => {
+      console.log("BLE State updated:", state);
+      if (state === "PoweredOn") {
+        // OPTIONAL: Automatically start scanning or just let the user do it
+      }
+    }, true);
+
+    return () => subscription.remove();
+  }, []);
+
+  const startScan = async () => {
     if (isScanning || isConnecting || connectedDevice) return;
+
+    // Check state explicitly
+    const state = await manager.state();
+    console.log("Start scan requested. Current state:", state);
+
+    if (state === "Unauthorized") {
+      Alert.alert(
+        "Permission Error",
+        "Bluetooth permission is denied. Please enable it in system settings.",
+        [
+          {
+            text: "Open Settings",
+            onPress: () => {
+              if (Platform.OS === "ios") {
+                Linking.openURL("app-settings:");
+              } else {
+                Linking.openSettings();
+              }
+            },
+          },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+      return;
+    }
+
+    if (state !== "PoweredOn") {
+      Alert.alert("Bluetooth not ready", `Current state: ${state}. Make sure Bluetooth is turned on.`);
+      return;
+    }
 
     setDevices({});
     setIsScanning(true);
 
-    // Only scan for devices advertising the UART service
-    manager.startDeviceScan([UART_SERVICE_UUID], null, (error, device) => {
-      if (error) {
-        console.log("Scan error:", error);
-        setIsScanning(false);
-        manager.stopDeviceScan();
-        return;
-      }
-      if (!device || !device.id) return;
-
-      console.log(
-        "Found UART candidate:",
-        device.name,
-        (device as any).localName,
-        device.id
+    try {
+      // Scan for all devices (null)
+      manager.startDeviceScan(
+        null,
+        { allowDuplicates: true },
+        (error, device) => {
+          if (error) {
+            // Handle specific iOS error for "scanning too frequently" or "powered off"
+            console.log("Scan callback error:", error);
+            if (error.errorCode === 601) { // Location services disabled on Android
+                // Handle location error
+            }
+            
+            Alert.alert("Scan Error", error.message);
+            setIsScanning(false);
+            manager.stopDeviceScan();
+            return;
+          }
+          
+          if (device) {
+            // Log only unique devices to avoid console spam
+            // console.log("Scanned:", device.id, device.name);
+            
+            setDevices((prev) => {
+              // Only update if new or name changed
+              if (prev[device.id] && prev[device.id].name === device.name) return prev;
+               
+              // Log when we find a new device or one with a name
+              if (!prev[device.id] || (!prev[device.id].name && device.name)) {
+                 console.log("New/Updated Device:", device.id, device.name, device.localName);
+              }
+              
+              return { ...prev, [device.id]: device };
+            });
+          }
+        }
       );
+    } catch (err: any) {
+      console.error("startDeviceScan exception:", err);
+      Alert.alert("Start Scan Exception", err.message);
+      setIsScanning(false);
+    }
 
-      setDevices((prev) => {
-        if (prev[device.id]) return prev;
-        return { ...prev, [device.id]: device };
-      });
-    });
-
+    // Stop after 15 seconds
     setTimeout(() => {
       manager.stopDeviceScan();
       setIsScanning(false);
-    }, 8000);
+      console.log("Scan stopped automatically");
+    }, 15000);
   };
 
   const connectToDevice = async (device: Device) => {
@@ -310,29 +393,36 @@ export default function IndexScreen() {
         </View>
 
         {!connectedDevice && (
-          <FlatList
-            data={deviceList}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.deviceItem}
-                onPress={() => connectToDevice(item)}
-                disabled={isConnecting}
-              >
-                <Text style={styles.deviceName}>
-                  {item.name ||
-                    (item as any).localName ||
-                    "UART device (likely badge)"}
-                </Text>
-                <Text style={styles.deviceId}>{item.id}</Text>
-              </TouchableOpacity>
-            )}
-            ListEmptyComponent={
+          <View>
+            {deviceList.length === 0 ? (
               <Text style={styles.hint}>
                 Tap "Scan for Badge". Only Nordic UART devices appear.
               </Text>
-            }
-          />
+            ) : (
+              deviceList.map((item) => {
+                // Filter: only show if name contains "Fausto" or is "UART device" (localName)
+                // Or show everything if you prefer debugging.
+                // Let's highlight your specific device if possible.
+                const isLikelyBadge = (item.name && item.name.includes("Fausto")) || 
+                                      ((item as any).localName && (item as any).localName.includes("Fausto"));
+                
+                return (
+                <TouchableOpacity
+                  key={item.id}
+                  style={[styles.deviceItem, isLikelyBadge && { borderColor: '#007AFF', borderWidth: 2, backgroundColor: '#eef' }]}
+                  onPress={() => connectToDevice(item)}
+                  disabled={isConnecting}
+                >
+                  <Text style={styles.deviceName}>
+                    {item.name || (item as any).localName || "Unnamed Device"}
+                  </Text>
+                  <Text style={styles.deviceId}>
+                    {item.id} {isLikelyBadge ? "⭐" : ""}
+                  </Text>
+                </TouchableOpacity>
+              )})
+            )}
+          </View>
         )}
 
         {/* OpenRouter Configuration */}
