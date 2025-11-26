@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Linking,
+  Image,
 } from "react-native";
 import {
   BleManager,
@@ -23,10 +24,14 @@ import {
 import { Buffer } from "buffer";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
-import { generateText, POPULAR_MODELS } from "../../services/openrouter";
+import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import * as UPNG from 'upng-js';
+
+import { generateText, generateImage } from "../../services/openrouter";
 
 const UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 const UART_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
+const AUTO_CONNECT_DEVICE_ID = "98B09776-ED44-C4D3-1E87-68B04161BDBB";
 
 const manager = new BleManager();
 const API_KEY_STORAGE_KEY = "openrouter_api_key";
@@ -37,16 +42,21 @@ export default function IndexScreen() {
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [uartRxChar, setUartRxChar] = useState<Characteristic | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [autoconnectFailed, setAutoconnectFailed] = useState(false);
   const [text, setText] = useState("Hello from Expo Router");
   const [color, setColor] = useState("#00FFFF");
   
   // OpenRouter state
   const [apiKey, setApiKey] = useState("");
   const [apiKeyInput, setApiKeyInput] = useState("");
-  const [selectedModel, setSelectedModel] = useState(POPULAR_MODELS[0].id);
   const [aiPrompt, setAiPrompt] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [showApiKeySection, setShowApiKeySection] = useState(false);
+  
+  // Image Generation State
+  const [generationMode, setGenerationMode] = useState<"text" | "image">("text");
+  const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
+  const [isSendingImage, setIsSendingImage] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -106,19 +116,132 @@ export default function IndexScreen() {
     };
   }, []);
 
+  const handleDeviceConnection = useCallback(async (device: Device) => {
+    try {
+      console.log("Low-level connected:", device.id);
+
+      await device.discoverAllServicesAndCharacteristics();
+
+      // Find UART RX characteristic explicitly
+      const chars = await device.characteristicsForService(UART_SERVICE_UUID);
+
+      console.log(
+        "UART characteristics:",
+        chars.map((c) => ({
+          uuid: c.uuid,
+          notif: c.isNotifiable,
+          write: c.isWritableWithResponse,
+          writeNR: c.isWritableWithoutResponse,
+        }))
+      );
+
+      const rx = chars.find(
+        (c) =>
+          c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
+          (c.isWritableWithoutResponse || c.isWritableWithResponse)
+      );
+
+      if (!rx) {
+        throw new Error("UART RX characteristic not found or not writable");
+      }
+
+      setConnectedDevice(device);
+      setUartRxChar(rx);
+      setIsConnecting(false);
+      setAutoconnectFailed(false);
+
+      console.log("Autoconnected successfully to", device.name || device.id);
+    } catch (e: any) {
+      console.log("Connection setup error:", e);
+      try {
+        await manager.cancelDeviceConnection(device.id);
+      } catch {}
+      setIsConnecting(false);
+    }
+  }, []);
+
+  const autoConnect = useCallback(async () => {
+    if (isConnecting || connectedDevice) return;
+
+    try {
+      console.log("Attempting autoconnect to", AUTO_CONNECT_DEVICE_ID);
+      setAutoconnectFailed(false);
+      setIsConnecting(true);
+
+      // Try to connect directly first (works if device was previously connected)
+      try {
+        const device = await manager.connectToDevice(AUTO_CONNECT_DEVICE_ID, {
+          timeout: 5000,
+        });
+        console.log("Direct connection successful:", device.id);
+        await handleDeviceConnection(device);
+        return;
+      } catch (directError) {
+        console.log("Direct connection failed, will scan:", directError);
+      }
+
+      // If direct connection fails, scan for the device
+      let foundDevice: Device | null = null;
+      const scanTimeout = setTimeout(() => {
+        manager.stopDeviceScan();
+        setIsScanning(false);
+        if (!foundDevice) {
+          console.log("Autoconnect: Device not found during scan");
+          setIsConnecting(false);
+          setAutoconnectFailed(true);
+        }
+      }, 10000); // 10 second scan timeout
+
+      setIsScanning(true);
+      manager.startDeviceScan(
+        null,
+        { allowDuplicates: false },
+        (error, device) => {
+          if (error) {
+            console.log("Scan error during autoconnect:", error);
+            clearTimeout(scanTimeout);
+            setIsScanning(false);
+            setIsConnecting(false);
+            setAutoconnectFailed(true);
+            return;
+          }
+
+          if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
+            foundDevice = device;
+            clearTimeout(scanTimeout);
+            manager.stopDeviceScan();
+            setIsScanning(false);
+            handleDeviceConnection(device);
+          }
+        }
+      );
+    } catch (e: any) {
+      console.log("Autoconnect error:", e);
+      setIsConnecting(false);
+      setIsScanning(false);
+      setAutoconnectFailed(true);
+    }
+  }, [isConnecting, connectedDevice, handleDeviceConnection]);
+
   useEffect(() => {
     const subscription = manager.onStateChange((state) => {
       console.log("BLE State updated:", state);
       if (state === "PoweredOn") {
-        // OPTIONAL: Automatically start scanning or just let the user do it
+        // Auto-connect to the target device
+        setTimeout(() => {
+          autoConnect();
+        }, 1000); // Small delay to ensure BLE is fully ready
       }
     }, true);
 
     return () => subscription.remove();
-  }, []);
+  }, [autoConnect]);
 
   const startScan = async () => {
     if (isScanning || isConnecting || connectedDevice) return;
+
+    // Reset autoconnect failed state when starting manual scan
+    setAutoconnectFailed(false);
 
     // Check state explicitly
     const state = await manager.state();
@@ -219,37 +342,8 @@ export default function IndexScreen() {
         timeout: 8000,
       });
 
-      console.log("Low-level connected:", connected.id);
-
-      await connected.discoverAllServicesAndCharacteristics();
-
-      // Find UART RX characteristic explicitly
-      const chars = await connected.characteristicsForService(
-        UART_SERVICE_UUID
-      );
-
-      console.log(
-        "UART characteristics:",
-        chars.map((c) => ({
-          uuid: c.uuid,
-          notif: c.isNotifiable,
-          write: c.isWritableWithResponse,
-          writeNR: c.isWritableWithoutResponse,
-        }))
-      );
-
-      const rx = chars.find(
-        (c) =>
-          c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
-          (c.isWritableWithoutResponse || c.isWritableWithResponse)
-      );
-
-      if (!rx) {
-        throw new Error("UART RX characteristic not found or not writable");
-      }
-
-      setConnectedDevice(connected);
-      setUartRxChar(rx);
+      await handleDeviceConnection(connected);
+      setAutoconnectFailed(false);
 
       Alert.alert(
         "Connected",
@@ -284,34 +378,6 @@ export default function IndexScreen() {
     }
   };
 
-  const sendText = async () => {
-    if (!connectedDevice || !uartRxChar) {
-      Alert.alert(
-        "Not ready",
-        "Make sure you're connected and UART RX is discovered."
-      );
-      return;
-    }
-
-    try {
-      const payload = JSON.stringify({ text, color }) + "\n";
-      const base64Data = Buffer.from(payload, "utf8").toString("base64");
-
-      console.log("Writing to RX char:", uartRxChar.uuid, "payload:", payload);
-
-      // Write directly via the characteristic object
-      await uartRxChar.writeWithoutResponse(base64Data);
-
-      // If something's wrong with writeWithoutResponse, fallback:
-      // await uartRxChar.writeWithResponse(base64Data);
-
-      console.log("Sent OK");
-    } catch (e: any) {
-      console.log("Write error:", e);
-      Alert.alert("Error", e?.message || "Failed to send");
-    }
-  };
-
   const disconnect = async () => {
     if (!connectedDevice) return;
     try {
@@ -338,7 +404,7 @@ export default function IndexScreen() {
     }
   };
 
-  const generateAIText = async () => {
+  const generateAIContent = async () => {
     if (!apiKey) {
       Alert.alert("API Key Required", "Please configure your OpenRouter API key first");
       setShowApiKeySection(true);
@@ -350,102 +416,324 @@ export default function IndexScreen() {
       return;
     }
 
+    // Connection check only needed for Text mode immediate send
+    // For Image mode, we can generate first then connect/send
+    if (generationMode === "text" && (!connectedDevice || !uartRxChar)) {
+      Alert.alert("Not Connected", "Please connect to your badge first");
+      return;
+    }
+
     setIsGenerating(true);
+    setGeneratedImageUrl(null);
+    
     try {
-      const generated = await generateText(
-        apiKey,
-        aiPrompt,
-        selectedModel,
-        "You are a helpful assistant that generates short, concise messages suitable for display on a small badge screen. Keep responses brief and engaging."
-      );
-      setText(generated);
-      Alert.alert("Success", "Text generated! Review and send to badge.");
+      if (generationMode === "text") {
+        const generated = await generateText(
+          apiKey,
+          aiPrompt,
+          "openai/gpt-5.1",
+          "Generate a random, concise prediction about the dilemma. Maximum 40 characters. Be brief and direct."
+        );
+        // Truncate to 40 characters to match badge display limit
+        const truncatedGenerated = generated.slice(0, 40).trim();
+        setText(truncatedGenerated);
+        
+        // Auto-send to badge
+        const payload = JSON.stringify({ text: truncatedGenerated, color }) + "\n";
+        const base64Data = Buffer.from(payload, "utf8").toString("base64");
+        await uartRxChar?.writeWithoutResponse(base64Data);
+        
+        Alert.alert("Sent!", "Prediction generated and sent to badge");
+      } else {
+        // IMAGE MODE
+        const imageUrl = await generateImage(apiKey, aiPrompt);
+        console.log("Generated Image URL:", imageUrl);
+        setGeneratedImageUrl(imageUrl);
+      }
     } catch (e: any) {
       console.error("Generation error:", e);
-      Alert.alert("Error", e.message || "Failed to generate text");
+      Alert.alert("Error", e.message || "Failed to generate content");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const sendImageToBadge = async () => {
+    if (!connectedDevice || !uartRxChar) {
+      Alert.alert("Not Connected", "Please connect to your badge first");
+      return;
+    }
+    if (!generatedImageUrl) return;
+
+    setIsSendingImage(true);
+
+    try {
+      // 1. Resize and Format Image using Expo Image Manipulator
+      // We resize to 250x122 (E-ink resolution)
+      const manipResult = await manipulateAsync(
+        generatedImageUrl,
+        [{ resize: { width: 250, height: 122 } }],
+        { compress: 1, format: SaveFormat.PNG, base64: false }
+      );
+
+      // 2. Fetch the resized image as ArrayBuffer
+      const response = await fetch(manipResult.uri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      // 3. Decode PNG to RGBA using UPNG
+      const png = UPNG.decode(arrayBuffer);
+      const rgba = UPNG.toRGBA8(png)[0]; // UPNG returns array of frames, get first
+      const data = new Uint8Array(rgba);
+      
+      const width = png.width;
+      const height = png.height;
+      
+      console.log(`Processing image: ${width}x${height}`);
+
+      // 4. Convert to 1-bit packed binary
+      // Calculate byte array size: ceil(pixels / 8)
+      const binaryData = new Uint8Array(Math.ceil((width * height) / 8));
+      
+      for (let i = 0; i < width * height; i++) {
+        const r = data[i * 4];
+        const g = data[i * 4 + 1];
+        const b = data[i * 4 + 2];
+        // Simple luminance formula
+        const brightness = (r + g + b) / 3;
+        
+        // Threshold: < 128 is Black (1), >= 128 is White (0)
+        // Note: E-ink logic depends on controller. Usually 0=Black, 1=White or vice versa.
+        // My code.py: palette[0]=White, palette[1]=Black.
+        // So if brightness < 128 (dark), we want index 1 (Black).
+        
+        if (brightness < 128) {
+            // Set bit to 1
+            const byteIndex = Math.floor(i / 8);
+            const bitIndex = 7 - (i % 8); // MSB first
+            binaryData[byteIndex] |= (1 << bitIndex);
+        }
+      }
+
+      // 5. Send Start Command
+      const startCmd = JSON.stringify({ 
+        cmd: "image_start", 
+        w: width, 
+        h: height,
+        len: binaryData.length 
+      }) + "\n";
+      await uartRxChar.writeWithoutResponse(Buffer.from(startCmd).toString("base64"));
+      
+      // Wait a bit for device to get ready
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      // 6. Send chunks
+      const CHUNK_SIZE = 180; // Safe BLE MTU
+      let offset = 0;
+      
+      while (offset < binaryData.length) {
+        const end = Math.min(offset + CHUNK_SIZE, binaryData.length);
+        const chunk = binaryData.slice(offset, end);
+        // Convert chunk to Base64
+        const base64Chunk = Buffer.from(chunk).toString("base64");
+        
+        await uartRxChar.writeWithoutResponse(base64Chunk);
+        
+        offset += CHUNK_SIZE;
+        // Small delay to prevent flooding
+        await new Promise(resolve => setTimeout(resolve, 30));
+      }
+
+      console.log("Image sent completely");
+      Alert.alert("Success", "Image sent to badge!");
+      
+    } catch (e: any) {
+      console.error("Send Image Error:", e);
+      Alert.alert("Error", "Failed to send image: " + e.message);
+    } finally {
+      setIsSendingImage(false);
     }
   };
 
   const deviceList = Object.values(devices);
 
   return (
-    <ScrollView style={styles.scrollContainer}>
+    <ScrollView style={styles.scrollContainer} contentContainerStyle={styles.scrollContent}>
       <View style={styles.container}>
-        <Text style={styles.title}>Fausto BLE Badge</Text>
-        <Text style={styles.label}>
-          Status:{" "}
-          {connectedDevice
-            ? `Connected to ${connectedDevice.name || connectedDevice.id}`
-            : isConnecting
-            ? "Connecting..."
-            : "Not connected"}
-        </Text>
-
-        <View style={styles.row}>
-          <Button
-            title={isScanning ? "Scanning..." : "Scan for Badge"}
-            onPress={startScan}
-            disabled={isScanning || !!connectedDevice || isConnecting}
-          />
-          {connectedDevice && <Button title="Disconnect" onPress={disconnect} />}
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.title}>🔮 Oracle Badge</Text>
+          <View style={[styles.statusBadge, connectedDevice && styles.statusBadgeConnected]}>
+            <View style={[styles.statusDot, connectedDevice && styles.statusDotConnected]} />
+            <Text style={styles.statusText}>
+              {connectedDevice
+                ? "Connected"
+                : isConnecting
+                ? "Connecting..."
+                : "Disconnected"}
+            </Text>
+          </View>
         </View>
 
-        {!connectedDevice && (
-          <View>
-            {deviceList.length === 0 ? (
-              <Text style={styles.hint}>
-                Tap "Scan for Badge". Only Nordic UART devices appear.
-              </Text>
-            ) : (
-              deviceList.map((item) => {
-                // Filter: only show if name contains "Fausto" or is "UART device" (localName)
-                // Or show everything if you prefer debugging.
-                // Let's highlight your specific device if possible.
-                const isLikelyBadge = (item.name && item.name.includes("Fausto")) || 
-                                      ((item as any).localName && (item as any).localName.includes("Fausto"));
-                
-                return (
-                <TouchableOpacity
-                  key={item.id}
-                  style={[styles.deviceItem, isLikelyBadge && { borderColor: '#007AFF', borderWidth: 2, backgroundColor: '#eef' }]}
-                  onPress={() => connectToDevice(item)}
-                  disabled={isConnecting}
-                >
-                  <Text style={styles.deviceName}>
-                    {item.name || (item as any).localName || "Unnamed Device"}
+        {/* Connection Section */}
+        <View style={styles.card}>
+          {!connectedDevice ? (
+            <>
+              {autoconnectFailed && (
+                <View style={styles.autoconnectFailedMessage}>
+                  <Text style={styles.autoconnectFailedText}>
+                    ⚠️ Autoconnect failed. Please scan manually to find your badge.
                   </Text>
-                  <Text style={styles.deviceId}>
-                    {item.id} {isLikelyBadge ? "⭐" : ""}
-                  </Text>
-                </TouchableOpacity>
-              )})
-            )}
+                </View>
+              )}
+              <TouchableOpacity
+                style={[styles.primaryButton, (isScanning || isConnecting) && styles.primaryButtonDisabled]}
+                onPress={startScan}
+                disabled={isScanning || isConnecting}
+              >
+                {isScanning ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.primaryButtonText}>Scanning...</Text>
+                  </>
+                ) : (
+                  <Text style={styles.primaryButtonText}>🔍 Scan for Badge</Text>
+                )}
+              </TouchableOpacity>
+
+              {deviceList.length > 0 && (
+                <View style={styles.deviceList}>
+                  {deviceList.map((item) => {
+                    const isLikelyBadge = (item.name && item.name.includes("Fausto")) || 
+                                          ((item as any).localName && (item as any).localName.includes("Fausto"));
+                    
+                    return (
+                      <TouchableOpacity
+                        key={item.id}
+                        style={[styles.deviceItem, isLikelyBadge && styles.deviceItemHighlighted]}
+                        onPress={() => connectToDevice(item)}
+                        disabled={isConnecting}
+                      >
+                        <Text style={styles.deviceName}>
+                          {item.name || (item as any).localName || "Unnamed Device"}
+                          {isLikelyBadge && " ⭐"}
+                        </Text>
+                        <Text style={styles.deviceId}>{item.id.slice(0, 8)}...</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+            </>
+          ) : (
+            <TouchableOpacity
+              style={styles.secondaryButton}
+              onPress={disconnect}
+            >
+              <Text style={styles.secondaryButtonText}>Disconnect</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Generation Section */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>✨ Generate</Text>
+          
+          {/* Mode Toggle */}
+          <View style={styles.modeToggle}>
+             <TouchableOpacity 
+               style={[styles.modeButton, generationMode === "text" && styles.modeButtonActive]}
+               onPress={() => setGenerationMode("text")}
+             >
+               <Text style={[styles.modeButtonText, generationMode === "text" && styles.modeButtonTextActive]}>Text</Text>
+             </TouchableOpacity>
+             <TouchableOpacity 
+               style={[styles.modeButton, generationMode === "image" && styles.modeButtonActive]}
+               onPress={() => setGenerationMode("image")}
+             >
+               <Text style={[styles.modeButtonText, generationMode === "image" && styles.modeButtonTextActive]}>Image</Text>
+             </TouchableOpacity>
           </View>
-        )}
 
-        {/* OpenRouter Configuration */}
-        <Text style={styles.sectionTitle}>OpenRouter AI</Text>
-        <TouchableOpacity
-          style={styles.toggleButton}
-          onPress={() => {
-            if (!showApiKeySection && apiKey) {
-              // When opening, load the saved key into input (will be masked)
-              setApiKeyInput(apiKey);
-            }
-            setShowApiKeySection(!showApiKeySection);
-          }}
-        >
-          <Text style={styles.toggleButtonText}>
-            {showApiKeySection ? "Hide" : "Show"} API Key Settings
-            {apiKey && " ✓"}
-          </Text>
-        </TouchableOpacity>
+          {!apiKey ? (
+            <View style={styles.apiKeyPrompt}>
+              <Text style={styles.hint}>Configure API key to generate content</Text>
+              <TouchableOpacity
+                style={styles.linkButton}
+                onPress={() => setShowApiKeySection(true)}
+              >
+                <Text style={styles.linkButtonText}>Configure API Key →</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.label}>{generationMode === "text" ? "Your Dilemma" : "Image Prompt"}</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={aiPrompt}
+                onChangeText={setAiPrompt}
+                placeholder={generationMode === "text" ? "Share your dilemma..." : "Describe an image..."}
+                multiline
+                numberOfLines={4}
+                placeholderTextColor="#999"
+              />
 
+              <TouchableOpacity
+                style={[styles.primaryButton, (isGenerating || !aiPrompt.trim()) && styles.primaryButtonDisabled]}
+                onPress={generateAIContent}
+                disabled={isGenerating || !aiPrompt.trim()}
+              >
+                {isGenerating ? (
+                  <>
+                    <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                    <Text style={styles.primaryButtonText}>Generating...</Text>
+                  </>
+                ) : (
+                  <Text style={styles.primaryButtonText}>🔮 Generate {generationMode === "text" ? "& Send" : "Image"}</Text>
+                )}
+              </TouchableOpacity>
+
+              {/* Image Preview & Send */}
+              {generationMode === "image" && generatedImageUrl && (
+                <View style={styles.imagePreviewContainer}>
+                  <Text style={styles.label}>Preview:</Text>
+                  <Image 
+                    source={{ uri: generatedImageUrl }} 
+                    style={styles.generatedImage} 
+                    resizeMode="contain"
+                  />
+                  <TouchableOpacity
+                    style={[styles.primaryButton, styles.sendImageButton, (!connectedDevice || isSendingImage) && styles.primaryButtonDisabled]}
+                    onPress={sendImageToBadge}
+                    disabled={!connectedDevice || isSendingImage}
+                  >
+                     {isSendingImage ? (
+                        <>
+                          <ActivityIndicator size="small" color="#fff" style={{ marginRight: 8 }} />
+                          <Text style={styles.primaryButtonText}>Sending...</Text>
+                        </>
+                     ) : (
+                        <Text style={styles.primaryButtonText}>📲 Send to E-ink</Text>
+                     )}
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {generationMode === "text" && !connectedDevice && (
+                <Text style={styles.hint}>Connect to badge first to send text</Text>
+              )}
+            </>
+          )}
+        </View>
+
+        {/* API Key Settings */}
         {showApiKeySection && (
-          <View style={styles.apiKeySection}>
-            <Text style={styles.label}>OpenRouter API Key</Text>
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>⚙️ API Settings</Text>
+              <TouchableOpacity onPress={() => setShowApiKeySection(false)}>
+                <Text style={styles.closeButton}>✕</Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.input}
               value={apiKeyInput}
@@ -453,176 +741,369 @@ export default function IndexScreen() {
               placeholder="sk-or-v1-..."
               secureTextEntry={true}
               autoCapitalize="none"
+              placeholderTextColor="#999"
             />
-            <Button title="Save API Key" onPress={saveApiKey} />
-            {apiKey && (
-              <Button
-                title="Clear API Key"
-                onPress={async () => {
-                  try {
-                    await SecureStore.deleteItemAsync(API_KEY_STORAGE_KEY);
-                    setApiKey("");
-                    setApiKeyInput("");
-                    Alert.alert("Success", "API key cleared");
-                  } catch (e: any) {
-                    Alert.alert("Error", `Failed to clear API key: ${e.message}`);
-                  }
-                }}
-              />
-            )}
+            <View style={styles.buttonRow}>
+              <TouchableOpacity style={styles.secondaryButton} onPress={saveApiKey}>
+                <Text style={styles.secondaryButtonText}>Save</Text>
+              </TouchableOpacity>
+              {apiKey && (
+                <TouchableOpacity
+                  style={styles.dangerButton}
+                  onPress={async () => {
+                    try {
+                      await SecureStore.deleteItemAsync(API_KEY_STORAGE_KEY);
+                      setApiKey("");
+                      setApiKeyInput("");
+                      setShowApiKeySection(false);
+                      Alert.alert("Success", "API key cleared");
+                    } catch (e: any) {
+                      Alert.alert("Error", `Failed to clear API key: ${e.message}`);
+                    }
+                  }}
+                >
+                  <Text style={styles.dangerButtonText}>Clear</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={styles.hint}>
               Get your API key from{" "}
-              <Text style={styles.link}>openrouter.ai</Text>
+              <Text style={styles.link} onPress={() => Linking.openURL("https://openrouter.ai")}>
+                openrouter.ai
+              </Text>
             </Text>
           </View>
         )}
 
-        {apiKey && (
-          <>
-            <Text style={styles.label}>AI Model</Text>
-            <FlatList
-              horizontal
-              data={POPULAR_MODELS}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={[
-                    styles.modelChip,
-                    selectedModel === item.id && styles.modelChipSelected,
-                  ]}
-                  onPress={() => setSelectedModel(item.id)}
-                >
-                  <Text
-                    style={[
-                      styles.modelChipText,
-                      selectedModel === item.id && styles.modelChipTextSelected,
-                    ]}
-                  >
-                    {item.name}
-                  </Text>
-                </TouchableOpacity>
-              )}
-              showsHorizontalScrollIndicator={false}
-            />
-            <Text style={styles.label}>AI Prompt</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={aiPrompt}
-              onChangeText={setAiPrompt}
-              placeholder="e.g., Generate a fun message about coffee"
-              multiline
-              numberOfLines={3}
-            />
-            <Button
-              title={isGenerating ? "Generating..." : "Generate Text with AI"}
-              onPress={generateAIText}
-              disabled={isGenerating || !apiKey}
-            />
-            {isGenerating && (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="small" />
-                <Text style={styles.hint}>Generating...</Text>
-              </View>
-            )}
-          </>
+        {!showApiKeySection && apiKey && (
+          <TouchableOpacity
+            style={styles.settingsLink}
+            onPress={() => {
+              setApiKeyInput(apiKey);
+              setShowApiKeySection(true);
+            }}
+          >
+            <Text style={styles.settingsLinkText}>⚙️ API Settings</Text>
+          </TouchableOpacity>
         )}
-
-        <Text style={styles.sectionTitle}>Send text</Text>
-        <TextInput
-          style={styles.input}
-          value={text}
-          onChangeText={setText}
-          placeholder="Text to show on badge"
-        />
-        <TextInput
-          style={styles.input}
-          value={color}
-          onChangeText={setColor}
-          placeholder="#RRGGBB color (e.g. #FF00FF)"
-          autoCapitalize="none"
-        />
-        <Button
-          title="Send to Badge"
-          onPress={sendText}
-          disabled={!connectedDevice || !uartRxChar}
-        />
       </View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContainer: { flex: 1 },
-  container: { flex: 1, padding: 20, paddingTop: 60, gap: 16 },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 8 },
-  label: { fontSize: 14, marginBottom: 4, fontWeight: "500" },
-  row: { flexDirection: "row", gap: 10, marginVertical: 8 },
-  deviceItem: {
-    padding: 10,
-    borderWidth: 1,
-    borderRadius: 8,
-    marginVertical: 4,
+  scrollContainer: { 
+    flex: 1,
+    backgroundColor: "#f5f5f7",
   },
-  deviceName: { fontWeight: "600" },
-  deviceId: { fontSize: 10, color: "#666" },
-  hint: { fontSize: 12, color: "#777", marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: "600", marginTop: 16 },
-  input: {
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: 10,
-    marginVertical: 4,
-    backgroundColor: "#fff",
+  scrollContent: {
+    paddingBottom: 40,
   },
-  textArea: {
-    minHeight: 80,
-    textAlignVertical: "top",
+  container: { 
+    flex: 1, 
+    padding: 20, 
+    paddingTop: 60,
   },
-  toggleButton: {
-    padding: 12,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-    marginVertical: 8,
+  header: {
+    marginBottom: 24,
+    alignItems: "center",
   },
-  toggleButtonText: {
-    textAlign: "center",
-    fontWeight: "600",
+  title: { 
+    fontSize: 32, 
+    fontWeight: "700", 
+    marginBottom: 12,
+    color: "#1d1d1f",
+    letterSpacing: -0.5,
   },
-  apiKeySection: {
-    padding: 12,
-    backgroundColor: "#f9f9f9",
-    borderRadius: 8,
-    marginVertical: 8,
-  },
-  link: {
-    color: "#007AFF",
-    textDecorationLine: "underline",
-  },
-  modelChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: "#e0e0e0",
-    marginRight: 8,
-    marginVertical: 4,
-  },
-  modelChipSelected: {
-    backgroundColor: "#007AFF",
-  },
-  modelChipText: {
-    fontSize: 12,
-    color: "#333",
-  },
-  modelChipTextSelected: {
-    color: "#fff",
-    fontWeight: "600",
-  },
-  loadingContainer: {
+  statusBadge: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#fff",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  statusBadgeConnected: {
+    backgroundColor: "#e8f5e9",
+  },
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#999",
+    marginRight: 8,
+  },
+  statusDotConnected: {
+    backgroundColor: "#4caf50",
+  },
+  statusText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+  },
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#1d1d1f",
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    backgroundColor: "#fafafa",
+    fontSize: 16,
+    color: "#1d1d1f",
+  },
+  textArea: {
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  primaryButton: {
+    backgroundColor: "#6366f1",
+    borderRadius: 12,
+    padding: 16,
+    alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    marginVertical: 8,
+    flexDirection: "row",
+    marginTop: 8,
+    shadowColor: "#6366f1",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  primaryButtonDisabled: {
+    backgroundColor: "#cbd5e1",
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  primaryButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  secondaryButton: {
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+  },
+  secondaryButtonText: {
+    color: "#475569",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  dangerButton: {
+    backgroundColor: "#fee2e2",
+    borderRadius: 12,
+    padding: 14,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#fecaca",
+  },
+  dangerButtonText: {
+    color: "#dc2626",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  buttonRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
+  deviceList: {
+    marginTop: 16,
+  },
+  deviceItem: {
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: "#fafafa",
+  },
+  deviceItemHighlighted: {
+    borderColor: "#6366f1",
+    borderWidth: 2,
+    backgroundColor: "#eef2ff",
+  },
+  deviceName: {
+    fontWeight: "600",
+    fontSize: 16,
+    color: "#1d1d1f",
+    marginBottom: 4,
+  },
+  deviceId: {
+    fontSize: 12,
+    color: "#999",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  hint: {
+    fontSize: 13,
+    color: "#666",
+    lineHeight: 18,
+    textAlign: "center",
+  },
+  link: {
+    color: "#6366f1",
+    fontWeight: "600",
+  },
+  colorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 12,
+  },
+  colorInput: {
+    flex: 1,
+  },
+  colorPreview: {
+    width: 50,
+    height: 50,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#e0e0e0",
+  },
+  apiKeyPrompt: {
+    alignItems: "center",
+    paddingVertical: 20,
+  },
+  linkButton: {
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+  },
+  linkButtonText: {
+    color: "#6366f1",
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  settingsLink: {
+    alignItems: "center",
+    paddingVertical: 12,
+  },
+  settingsLinkText: {
+    color: "#6366f1",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  closeButton: {
+    fontSize: 20,
+    color: "#999",
+    fontWeight: "300",
+  },
+  charCounter: {
+    fontSize: 13,
+    color: "#666",
+    fontWeight: "600",
+  },
+  charCounterWarning: {
+    color: "#dc2626",
+  },
+  inputWarning: {
+    borderColor: "#fca5a5",
+    backgroundColor: "#fef2f2",
+  },
+  warningText: {
+    fontSize: 12,
+    color: "#dc2626",
+    marginTop: -8,
+    marginBottom: 8,
+    fontWeight: "500",
+  },
+  autoconnectFailedMessage: {
+    backgroundColor: "#fef3c7",
+    borderLeftWidth: 4,
+    borderLeftColor: "#f59e0b",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+  },
+  autoconnectFailedText: {
+    fontSize: 14,
+    color: "#92400e",
+    lineHeight: 20,
+  },
+  // New Styles
+  modeToggle: {
+    flexDirection: "row",
+    backgroundColor: "#f1f5f9",
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16,
+  },
+  modeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: "center",
+    borderRadius: 10,
+  },
+  modeButtonActive: {
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  modeButtonText: {
+    fontWeight: "600",
+    color: "#64748b",
+    fontSize: 14,
+  },
+  modeButtonTextActive: {
+    color: "#6366f1",
+  },
+  imagePreviewContainer: {
+    marginTop: 16,
+    alignItems: "center",
+  },
+  generatedImage: {
+    width: 250,
+    height: 122,
+    backgroundColor: "#e0e0e0",
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: "#ccc",
+    marginBottom: 12,
+  },
+  sendImageButton: {
+    width: "100%",
+    backgroundColor: "#10b981", // Green for send
+    shadowColor: "#10b981",
   },
 });
-
