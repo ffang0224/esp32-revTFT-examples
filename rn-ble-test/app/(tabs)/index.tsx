@@ -459,7 +459,7 @@ export default function IndexScreen() {
   };
 
   const sendImageToBadge = async () => {
-    if (!connectedDevice || !uartRxChar) {
+    if (!connectedDevice) {
       Alert.alert("Not Connected", "Please connect to your badge first");
       return;
     }
@@ -468,19 +468,67 @@ export default function IndexScreen() {
     setIsSendingImage(true);
 
     try {
-      // 1. Resize and Format Image using Expo Image Manipulator
-      // We resize to 250x122 (E-ink resolution)
+      // Verify connection is still active
+      if (!connectedDevice.isConnected()) {
+        throw new Error("Device disconnected. Please reconnect.");
+      }
+
+      // Re-acquire characteristic if needed (handles stale characteristic issue)
+      let char = uartRxChar;
+      if (!char) {
+        console.log("Re-acquiring UART characteristic...");
+        await connectedDevice.discoverAllServicesAndCharacteristics();
+        const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
+        char = chars.find(
+          (c) =>
+            c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
+            (c.isWritableWithoutResponse || c.isWritableWithResponse)
+        );
+        if (!char) {
+          throw new Error("UART RX characteristic not found");
+        }
+        setUartRxChar(char);
+      }
+
+      // Small delay to ensure previous image processing is complete
+      await new Promise(resolve => setTimeout(resolve, 300));
+      // 1. First, get the original image dimensions to calculate aspect ratio
+      const originalResponse = await fetch(generatedImageUrl);
+      const originalArrayBuffer = await originalResponse.arrayBuffer();
+      const originalPng = UPNG.decode(originalArrayBuffer);
+      const originalAspectRatio = originalPng.width / originalPng.height;
+      
+      // 2. Calculate dimensions that fit within 250x122 while preserving aspect ratio
+      const maxWidth = 250;
+      const maxHeight = 122;
+      let targetWidth = maxWidth;
+      let targetHeight = maxHeight;
+      
+      if (originalAspectRatio > maxWidth / maxHeight) {
+        // Image is wider - constrain by width
+        targetWidth = maxWidth;
+        targetHeight = Math.round(maxWidth / originalAspectRatio);
+      } else {
+        // Image is taller - constrain by height
+        targetHeight = maxHeight;
+        targetWidth = Math.round(maxHeight * originalAspectRatio);
+      }
+      
+      console.log(`Original: ${originalPng.width}x${originalPng.height}, Aspect: ${originalAspectRatio.toFixed(2)}`);
+      console.log(`Resizing to: ${targetWidth}x${targetHeight} (preserving aspect ratio)`);
+      
+      // 3. Resize preserving aspect ratio
       const manipResult = await manipulateAsync(
         generatedImageUrl,
-        [{ resize: { width: 250, height: 122 } }],
+        [{ resize: { width: targetWidth, height: targetHeight } }],
         { compress: 1, format: SaveFormat.PNG, base64: false }
       );
 
-      // 2. Fetch the resized image as ArrayBuffer
+      // 4. Fetch the resized image as ArrayBuffer
       const response = await fetch(manipResult.uri);
       const arrayBuffer = await response.arrayBuffer();
 
-      // 3. Decode PNG to RGBA using UPNG
+      // 5. Decode PNG to RGBA using UPNG
       const png = UPNG.decode(arrayBuffer);
       const rgba = UPNG.toRGBA8(png)[0]; // UPNG returns array of frames, get first
       const data = new Uint8Array(rgba);
@@ -490,27 +538,53 @@ export default function IndexScreen() {
       
       console.log(`Processing image: ${width}x${height}`);
 
-      // 4. Convert to 1-bit packed binary
-      // Calculate byte array size: ceil(pixels / 8)
-      const binaryData = new Uint8Array(Math.ceil((width * height) / 8));
-      
+      // 6. Convert to grayscale with proper luminance weights (better quality)
+      const grayscale = new Float32Array(width * height);
       for (let i = 0; i < width * height; i++) {
         const r = data[i * 4];
         const g = data[i * 4 + 1];
         const b = data[i * 4 + 2];
-        // Simple luminance formula
-        const brightness = (r + g + b) / 3;
-        
-        // Threshold: < 128 is Black (1), >= 128 is White (0)
-        // Note: E-ink logic depends on controller. Usually 0=Black, 1=White or vice versa.
-        // My code.py: palette[0]=White, palette[1]=Black.
-        // So if brightness < 128 (dark), we want index 1 (Black).
-        
-        if (brightness < 128) {
-            // Set bit to 1
-            const byteIndex = Math.floor(i / 8);
-            const bitIndex = 7 - (i % 8); // MSB first
-            binaryData[byteIndex] |= (1 << bitIndex);
+        // Use ITU-R BT.709 luminance weights for better quality
+        grayscale[i] = r * 0.2126 + g * 0.7152 + b * 0.0722;
+      }
+
+      // 7. Apply Floyd-Steinberg dithering for better visual quality
+      const dithered = new Uint8Array(width * height);
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const oldPixel = grayscale[idx];
+          const newPixel = oldPixel < 128 ? 0 : 255;
+          dithered[idx] = newPixel;
+          
+          const error = oldPixel - newPixel;
+          
+          // Distribute error to neighboring pixels (Floyd-Steinberg)
+          if (x < width - 1) {
+            grayscale[idx + 1] += error * (7 / 16);
+          }
+          if (y < height - 1) {
+            if (x > 0) {
+              grayscale[idx + width - 1] += error * (3 / 16);
+            }
+            grayscale[idx + width] += error * (5 / 16);
+            if (x < width - 1) {
+              grayscale[idx + width + 1] += error * (1 / 16);
+            }
+          }
+        }
+      }
+
+      // 8. Convert dithered image to 1-bit packed binary
+      const binaryData = new Uint8Array(Math.ceil((width * height) / 8));
+      
+      for (let i = 0; i < width * height; i++) {
+        // dithered[i] == 0 means black (1), 255 means white (0)
+        if (dithered[i] < 128) {
+          // Set bit to 1 for black
+          const byteIndex = Math.floor(i / 8);
+          const bitIndex = 7 - (i % 8); // MSB first
+          binaryData[byteIndex] |= (1 << bitIndex);
         }
       }
 
@@ -521,7 +595,13 @@ export default function IndexScreen() {
         h: height,
         len: binaryData.length 
       }) + "\n";
-      await uartRxChar.writeWithoutResponse(Buffer.from(startCmd).toString("base64"));
+      
+      // Verify char is still valid before sending
+      if (!char.isWritableWithoutResponse && !char.isWritableWithResponse) {
+        throw new Error("Characteristic is no longer writable");
+      }
+      
+      await char.writeWithoutResponse(Buffer.from(startCmd).toString("base64"));
       
       // Wait a bit for device to get ready
       await new Promise(resolve => setTimeout(resolve, 200));
@@ -531,20 +611,47 @@ export default function IndexScreen() {
       let offset = 0;
       
       while (offset < binaryData.length) {
+        // Verify connection before each chunk
+        if (!connectedDevice.isConnected()) {
+          throw new Error("Device disconnected during transmission");
+        }
+        
         const end = Math.min(offset + CHUNK_SIZE, binaryData.length);
         const chunk = binaryData.slice(offset, end);
         // Convert chunk to Base64
         const base64Chunk = Buffer.from(chunk).toString("base64");
         
-        await uartRxChar.writeWithoutResponse(base64Chunk);
+        try {
+          await char.writeWithoutResponse(base64Chunk);
+        } catch (chunkError: any) {
+          console.error(`Error sending chunk at offset ${offset}:`, chunkError);
+          // Try to re-acquire characteristic
+          try {
+            await connectedDevice.discoverAllServicesAndCharacteristics();
+            const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
+            char = chars.find(
+              (c) =>
+                c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
+                (c.isWritableWithoutResponse || c.isWritableWithResponse)
+            );
+            if (char) {
+              setUartRxChar(char);
+              await char.writeWithoutResponse(base64Chunk);
+            } else {
+              throw new Error("Could not re-acquire characteristic");
+            }
+          } catch (reacquireError) {
+            throw new Error(`Failed to send chunk: ${reacquireError}`);
+          }
+        }
         
         offset += CHUNK_SIZE;
         // Small delay to prevent flooding
         await new Promise(resolve => setTimeout(resolve, 30));
       }
 
-      console.log("Image sent completely");
-      Alert.alert("Success", "Image sent to badge!");
+      console.log(`Image sent completely: ${width}x${height} (aspect ratio preserved)`);
+      Alert.alert("Success", `Image sent to badge!\n${width}x${height} (centered on display)`);
       
     } catch (e: any) {
       console.error("Send Image Error:", e);
