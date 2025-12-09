@@ -105,15 +105,44 @@ def render_image(binary_data, width, height, prompt_text=""):
         if len(binary_data) < expected_bytes:
             print(f"Warning: Expected {expected_bytes} bytes, got {len(binary_data)}")
         
-        # Display dimensions: 250x122 (from init_eink_display)
-        display_width = 250
-        display_height = 122
+        # Get ACTUAL display dimensions (accounts for rotation)
+        # Don't hardcode - query from the display object
+        display_width = eink.width
+        display_height = eink.height
+        print(f"Actual display dimensions: {display_width}x{display_height}")
         
-        # Split layout: left side for image (122x122 square), right side for text (128x122)
-        image_width = 122
-        image_height = 122
-        text_width = display_width - image_width  # 128
-        text_height = display_height  # 122
+        # Margins for cleaner look
+        MARGIN = 6  # Pixels of margin around content
+        
+        # Determine layout based on actual dimensions
+        # If display is wider than tall (250x122), use horizontal split (image left, text right)
+        # If display is taller than wide (122x250), use vertical split (image top, text bottom)
+        if display_width >= display_height:
+            # Horizontal layout: image on left, text on right
+            image_size = min(display_height - MARGIN * 2, display_width // 2 - MARGIN * 2, 122)
+            image_width = image_size
+            image_height = image_size
+            text_width = display_width - image_width - MARGIN * 3  # margin on left, between, right
+            text_height = display_height - MARGIN * 2
+            image_x = MARGIN
+            image_y = MARGIN
+            text_area_x = image_width + MARGIN * 2
+            text_area_y = MARGIN
+            layout = "horizontal"
+        else:
+            # Vertical layout: image on top, text on bottom
+            image_size = min(display_width - MARGIN * 2, display_height // 2 - MARGIN * 2, 122)
+            image_width = image_size
+            image_height = image_size
+            text_width = display_width - MARGIN * 2
+            text_height = display_height - image_height - MARGIN * 3  # margin on top, between, bottom
+            image_x = (display_width - image_width) // 2  # Center image horizontally
+            image_y = MARGIN
+            text_area_x = MARGIN
+            text_area_y = image_height + MARGIN * 2
+            layout = "vertical"
+        
+        print(f"Layout: {layout}, image area: {image_width}x{image_height} at ({image_x},{image_y}), text area: {text_width}x{text_height} at ({text_area_x},{text_area_y})")
         
         # Ensure image dimensions match expected square size
         # Crop to fit the 122x122 square area
@@ -131,76 +160,88 @@ def render_image(binary_data, width, height, prompt_text=""):
         img_palette[1] = 0x000000  # Black
         
         # Unpack binary data (MSB first, bit=1 means Black)
-        # Data is a continuous stream of bits, not row-aligned
+        # Data is a continuous stream of bits in row-major order
         # Pixels are packed sequentially: pixel 0, pixel 1, pixel 2, ... pixel (width*height-1)
-        # If source is larger than target, we crop by only taking pixels from top-left actual_width x actual_height area
         
-        pixel_index = 0
-        max_pixels = actual_width * actual_height
+        # CENTER-CROP: If source is larger than target, take the center portion
+        # This ensures the image content stays centered even when cropping
+        crop_x_start = max(0, (width - actual_width) // 2)
+        crop_y_start = max(0, (height - actual_height) // 2)
+        crop_x_end = crop_x_start + actual_width
+        crop_y_end = crop_y_start + actual_height
+        
+        print(f"Center crop: source ({crop_x_start},{crop_y_start}) to ({crop_x_end},{crop_y_end})")
+        
+        # Unpack directly into the destination positions using (x, y) indexing
         source_pixel_index = 0
-        max_source_pixels = width * height
+        pixels_set = 0
         
         # Process bytes sequentially
         for byte in binary_data:
-            if pixel_index >= max_pixels or source_pixel_index >= max_source_pixels:
+            if source_pixel_index >= width * height:
                 break
             
             # Process 8 bits per byte, MSB first
             for bit_pos in range(7, -1, -1):  # 7, 6, 5, 4, 3, 2, 1, 0
-                if pixel_index >= max_pixels or source_pixel_index >= max_source_pixels:
+                if source_pixel_index >= width * height:
                     break
                 
                 # Calculate which row and column this source pixel is in
                 source_row = source_pixel_index // width
                 source_col = source_pixel_index % width
                 
-                # Only use pixels that are within our cropped area (top-left actual_width x actual_height)
-                if source_row < actual_height and source_col < actual_width:
+                # Check if this pixel is within our center-crop area
+                if (crop_y_start <= source_row < crop_y_end and 
+                    crop_x_start <= source_col < crop_x_end):
+                    # Calculate destination position in the cropped bitmap
+                    dst_x = source_col - crop_x_start
+                    dst_y = source_row - crop_y_start
+                    
                     # Extract bit (MSB first)
                     bit = (byte >> bit_pos) & 1
                     # bit=1 means Black (palette index 1), bit=0 means White (palette index 0)
-                    img_bitmap[pixel_index] = bit
-                    pixel_index += 1
+                    img_bitmap[dst_x, dst_y] = bit
+                    pixels_set += 1
                 
                 source_pixel_index += 1
         
-        print(f"Unpacked {pixel_index} pixels into {actual_width}x{actual_height} bitmap (from {width}x{height} source)")
+        print(f"Unpacked {pixels_set} pixels into {actual_width}x{actual_height} bitmap (center-cropped from {width}x{height})")
         
         # Create a full-screen bitmap filled with white (to prevent tiling)
         screen_bitmap = displayio.Bitmap(display_width, display_height, 2)
-        # Fill with white (palette index 0)
-        for i in range(display_width * display_height):
-            screen_bitmap[i] = 0
+        # Fill with white (palette index 0) using x,y indexing
+        for y in range(display_height):
+            for x in range(display_width):
+                screen_bitmap[x, y] = 0
         
-        # Copy the image bitmap to the left side
-        # Center the image both horizontally and vertically within the 122x122 square area
-        image_x_offset = max(0, (image_width - actual_width) // 2)
-        image_y_offset = max(0, (image_height - actual_height) // 2)
+        # Copy the image bitmap to the image area (position set by layout)
+        # Center the image within the image area
+        center_x_offset = max(0, (image_width - actual_width) // 2)
+        center_y_offset = max(0, (image_height - actual_height) // 2)
         
         # Ensure we don't exceed bounds
-        copy_height = min(actual_height, image_height - image_y_offset)
-        copy_width = min(actual_width, image_width - image_x_offset)
+        copy_height = min(actual_height, image_height - center_y_offset)
+        copy_width = min(actual_width, image_width - center_x_offset)
         
+        # Copy using explicit (x, y) coordinates
+        # Image starts at (image_x, image_y) set by layout
         for y in range(copy_height):
             for x in range(copy_width):
-                src_index = y * actual_width + x
-                dst_y = image_y_offset + y
-                dst_x = image_x_offset + x
-                if dst_y < image_height and dst_x < image_width:
-                    dst_index = dst_y * display_width + dst_x
-                    if (src_index < actual_width * actual_height and 
-                        dst_index < display_width * display_height):
-                        screen_bitmap[dst_index] = img_bitmap[src_index]
+                src_x = x
+                src_y = y
+                dst_x = image_x + center_x_offset + x
+                dst_y = image_y + center_y_offset + y
+                if dst_y < display_height and dst_x < display_width:
+                    screen_bitmap[dst_x, dst_y] = img_bitmap[src_x, src_y]
         
-        print(f"Image placed on left side: {actual_width}x{actual_height} (centered at offset {image_x_offset}, {image_y_offset})")
+        print(f"Image placed: {actual_width}x{actual_height} at ({image_x + center_x_offset}, {image_y + center_y_offset})")
         
-        # Render text on the right side if prompt is provided
+        # Render text in the text area if prompt is provided
+        # text_area_x and text_area_y are already set by the layout logic above
         if prompt_text:
             try:
-                # Word wrap text to fit within text_width (128 pixels)
+                # Word wrap text to fit within text area
                 # Estimate: terminalio.FONT is about 6 pixels wide per character
-                # So roughly 128/6 ≈ 21 characters per line
-                # With ~8 lines available, we can fit about 168 characters
                 chars_per_line = text_width // 6  # Rough estimate
                 max_lines = text_height // 8  # Rough estimate for line height
                 max_chars = chars_per_line * max_lines
@@ -258,54 +299,71 @@ def render_image(binary_data, width, height, prompt_text=""):
                     
                     print(f"Text centered: x_offset={text_x_offset}, y_offset={text_y_offset}")
                     
-                    # Copy label bitmap to the right side of screen bitmap, centered
+                    # Copy label bitmap to the text area of screen bitmap, centered
                     # Ensure we don't exceed bounds
-                    copy_height = min(label_h, text_height - text_y_offset)
-                    copy_width = min(label_w, text_width - text_x_offset)
+                    copy_h = min(label_h, text_height - text_y_offset)
+                    copy_w = min(label_w, text_width - text_x_offset)
                     
-                    for y in range(copy_height):
-                        for x in range(copy_width):
-                            src_idx = y * label_bitmap.width + x
-                            dst_y = text_y_offset + y
-                            dst_x = image_width + text_x_offset + x
-                            if dst_y < text_height and dst_x < display_width:
-                                dst_idx = dst_y * display_width + dst_x
-                                if (src_idx < label_bitmap.width * label_bitmap.height and 
-                                    dst_idx < display_width * display_height):
-                                    pixel_val = label_bitmap[src_idx]
-                                    # 0 = white/background, non-zero = black/foreground
-                                    if pixel_val != 0:
-                                        screen_bitmap[dst_idx] = 1  # Black
+                    # Use explicit (x, y) coordinates for clarity
+                    for y in range(copy_h):
+                        for x in range(copy_w):
+                            dst_y = text_area_y + text_y_offset + y
+                            dst_x = text_area_x + text_x_offset + x
+                            if dst_y < display_height and dst_x < display_width:
+                                # Try to access label_bitmap with (x, y) or linear indexing
+                                try:
+                                    pixel_val = label_bitmap[x, y]
+                                except (TypeError, IndexError):
+                                    # Fallback to linear indexing
+                                    src_idx = y * label_bitmap.width + x
+                                    if src_idx < label_bitmap.width * label_bitmap.height:
+                                        pixel_val = label_bitmap[src_idx]
                                     else:
-                                        screen_bitmap[dst_idx] = 0  # White
+                                        pixel_val = 0
+                                
+                                # 0 = white/background, non-zero = black/foreground
+                                if pixel_val != 0:
+                                    screen_bitmap[dst_x, dst_y] = 1  # Black
+                                else:
+                                    screen_bitmap[dst_x, dst_y] = 0  # White
                     
-                    print(f"Text rendered on right side: {label_w}x{label_h} (centered, wrapped)")
+                    print(f"Text rendered in text area: {label_w}x{label_h} at ({text_area_x}, {text_area_y})")
                 else:
                     print("Warning: Could not access label bitmap, text will not be displayed")
                     
             except Exception as text_err:
                 print(f"Text rendering error: {text_err}")
                 print(f"Error type: {type(text_err).__name__}")
-                # Fallback: draw a border around text area
+                # Fallback: draw a border around text area using (x, y) indexing
                 for x in range(text_width):
-                    if image_width + x < display_width:
-                        screen_bitmap[image_width + x] = 1  # Top border
-                        if (text_height - 1) * display_width + image_width + x < display_width * display_height:
-                            screen_bitmap[(text_height - 1) * display_width + image_width + x] = 1  # Bottom border
+                    dst_x = text_area_x + x
+                    if dst_x < display_width:
+                        if text_area_y < display_height:
+                            screen_bitmap[dst_x, text_area_y] = 1  # Top border
+                        if text_area_y + text_height - 1 < display_height:
+                            screen_bitmap[dst_x, text_area_y + text_height - 1] = 1  # Bottom border
                 for y in range(text_height):
-                    if y * display_width + image_width < display_width * display_height:
-                        screen_bitmap[y * display_width + image_width] = 1  # Left border
-                    if y * display_width + (display_width - 1) < display_width * display_height:
-                        screen_bitmap[y * display_width + (display_width - 1)] = 1  # Right border
+                    dst_y = text_area_y + y
+                    if dst_y < display_height:
+                        if text_area_x < display_width:
+                            screen_bitmap[text_area_x, dst_y] = 1  # Left border
+                        if text_area_x + text_width - 1 < display_width:
+                            screen_bitmap[text_area_x + text_width - 1, dst_y] = 1  # Right border
         
         print(f"Screen bitmap size: {screen_bitmap.width}x{screen_bitmap.height}")
+        print(f"Display size: {display_width}x{display_height}")
         
         # Create TileGrid for the full-screen bitmap
-        # Match test-eink.py pattern: create TileGrid directly from bitmap
-        # Don't specify width/height - let it use the bitmap's natural dimensions
+        # Explicitly set to 1x1 tiles to prevent any tiling behavior
         screen_tile = displayio.TileGrid(
             screen_bitmap, 
-            pixel_shader=img_palette
+            pixel_shader=img_palette,
+            width=1,
+            height=1,
+            tile_width=screen_bitmap.width,
+            tile_height=screen_bitmap.height,
+            x=0,
+            y=0
         )
         
         # Create a new group for the e-ink display (clear any previous content)
@@ -320,17 +378,23 @@ def render_image(binary_data, width, height, prompt_text=""):
         # Set root group on e-ink display - match test-eink.py pattern
         eink.root_group = eink_group
         
+        # Small delay to ensure framebuffer is fully written before refresh
+        # This can help prevent partial/incomplete image issues
+        time.sleep(0.5)
+        print("Framebuffer ready, starting refresh...")
+        
         # Refresh the e-ink display - match test-eink.py pattern exactly
         eink.refresh()
-        print("refreshed")
+        print("Refresh command sent")
         
-        print(f"Split layout rendered: {width}x{height} image (left) + text (right)")
+        print(f"Split layout rendered: {width}x{height} image + text")
         
         # Wait for the physical refresh to complete
-        # We force-reinit the display each time, so the driver's internal timer is reset
-        # The actual physical refresh takes ~3-5s for B/W mode
-        refresh_wait = 5
-        print(f"Waiting {refresh_wait}s for physical e-ink refresh to complete")
+        # E-ink displays need time for the physical update (electrophoretic particles moving)
+        # The SSD1680 typically takes 3-5 seconds for a full refresh
+        # Using a longer wait to ensure complete refresh
+        refresh_wait = 6
+        print(f"Waiting {refresh_wait}s for physical e-ink refresh to complete...")
         time.sleep(refresh_wait)
         print("E-ink refresh complete")
         
@@ -454,78 +518,86 @@ while True:
             if not raw:
                 continue
 
-            # Debug: log what we're receiving (but limit output to avoid spam)
-            if not image_state["receiving"] or len(image_state["data"]) % 500 < 50:  # Log every ~500 bytes
-                print(f"RX: {len(raw)} bytes, receiving={image_state['receiving']}, total={len(image_state['data']) if image_state['receiving'] else 0}")
+            # Debug: log what we're receiving
+            print(f"RX: {len(raw)}B, recv={image_state['receiving']}, data={len(image_state['data']) if image_state['receiving'] else 0}")
 
             # If receiving image data, handle binary chunks
             if image_state["receiving"]:
+                # Check if this might be a new image_start command (JSON)
+                # This handles the case where user pressed send again
+                is_new_command = False
                 try:
-                    current_time = time.monotonic()
-                    
-                    # Check for timeout (30 seconds without receiving data)
-                    if image_state["last_chunk_time"] > 0:
-                        time_since_last = current_time - image_state["last_chunk_time"]
-                        if time_since_last > 30:
-                            print("Image receive timeout! Resetting...")
-                            image_state["receiving"] = False
-                            image_state["data"] = bytearray()
-                            set_text("Image timeout!", 0xFF0000)
-                            continue
-                    
-                    # React Native sends base64-encoded chunks as strings
-                    # writeWithoutResponse sends the base64 string as-is (doesn't decode it)
-                    # So we need to decode the base64 string to get the binary data
-                    
-                    # Try to decode as UTF-8 first to get the base64 string
-                    try:
-                        base64_string = raw.decode("utf-8").strip()
-                        # Decode the base64 string to get binary data
-                        decoded = base64.b64decode(base64_string)
-                        image_state["data"].extend(decoded)
-                        print(f"Image chunk: {len(decoded)} bytes decoded, total: {len(image_state['data'])}/{image_state['expected_len']}")
-                    except Exception as decode_err:
-                        # If base64 decode fails, maybe it's already binary (fallback)
-                        try:
-                            image_state["data"].extend(raw)
-                            print(f"Image chunk (raw binary fallback): {len(raw)} bytes, total: {len(image_state['data'])}/{image_state['expected_len']}")
-                        except Exception as extend_err:
-                            print(f"Error adding chunk: decode={decode_err}, extend={extend_err}")
-                            raise
-                    
-                    image_state["last_chunk_time"] = current_time
-                    
-                    # Update progress on display every 10%
-                    progress = (len(image_state["data"]) * 100) // image_state["expected_len"] if image_state["expected_len"] > 0 else 0
-                    if progress % 10 == 0 or len(image_state["data"]) >= image_state["expected_len"]:
-                        set_text(f"Receiving: {progress}%", 0xFFFF00)
-                    
-                    # Check if complete
-                    if len(image_state["data"]) >= image_state["expected_len"]:
-                        print("Image complete! Rendering...")
-                        # Truncate to expected length
-                        image_state["data"] = image_state["data"][:image_state["expected_len"]]
-                        # Render image to display with prompt text
-                        render_image(
-                            image_state["data"],
-                            image_state["width"],
-                            image_state["height"],
-                            image_state["prompt"]
-                        )
-                        # Reset state
+                    test_str = raw.decode("utf-8").strip()
+                    if test_str.startswith("{") and "cmd" in test_str:
+                        print("Detected new command while receiving - resetting state")
                         image_state["receiving"] = False
                         image_state["data"] = bytearray()
                         image_state["prompt"] = ""
                         image_state["last_chunk_time"] = 0
-                except Exception as e:
-                    print("Image decode error:", e)
-                    print(f"Error type: {type(e).__name__}")
-                    image_state["receiving"] = False
-                    image_state["data"] = bytearray()
-                    image_state["prompt"] = ""
-                    image_state["last_chunk_time"] = 0
-                    set_text("Image error!", 0xFF0000)
-                continue
+                        is_new_command = True
+                        # Fall through to JSON processing below
+                except:
+                    pass  # Not a JSON command, continue as image data
+                
+                if not is_new_command:
+                    try:
+                        current_time = time.monotonic()
+                        
+                        # Check for timeout (20 seconds without receiving data)
+                        if image_state["last_chunk_time"] > 0:
+                            time_since_last = current_time - image_state["last_chunk_time"]
+                            if time_since_last > 20:
+                                print("Image receive timeout! Resetting...")
+                                image_state["receiving"] = False
+                                image_state["data"] = bytearray()
+                                image_state["prompt"] = ""
+                                image_state["last_chunk_time"] = 0
+                                set_text("Timeout!", 0xFF0000)
+                                continue
+                        
+                        # Process as image chunk
+                        # react-native-ble-plx's writeWithoutResponse DECODES base64 before sending
+                        # So we receive RAW BINARY data, not base64 strings
+                        # Just append the raw bytes directly!
+                        image_state["data"].extend(raw)
+                        
+                        # Log progress periodically
+                        if len(image_state["data"]) % 500 < len(raw):
+                            print(f"Chunk: {len(raw)}B, total: {len(image_state['data'])}/{image_state['expected_len']}")
+                        
+                        image_state["last_chunk_time"] = current_time
+                        
+                        # Update progress on display every 10%
+                        progress = (len(image_state["data"]) * 100) // image_state["expected_len"] if image_state["expected_len"] > 0 else 0
+                        if progress % 10 == 0 or len(image_state["data"]) >= image_state["expected_len"]:
+                            set_text(f"Receiving: {progress}%", 0xFFFF00)
+                        
+                        # Check if complete
+                        if len(image_state["data"]) >= image_state["expected_len"]:
+                            print("Image complete! Rendering...")
+                            # Truncate to expected length
+                            image_state["data"] = image_state["data"][:image_state["expected_len"]]
+                            # Render image to display with prompt text
+                            render_image(
+                                image_state["data"],
+                                image_state["width"],
+                                image_state["height"],
+                                image_state["prompt"]
+                            )
+                            # Reset state
+                            image_state["receiving"] = False
+                            image_state["data"] = bytearray()
+                            image_state["prompt"] = ""
+                            image_state["last_chunk_time"] = 0
+                    except Exception as e:
+                        print("Image decode error:", e)
+                        print(f"Error type: {type(e).__name__}")
+                        image_state["receiving"] = False
+                        image_state["data"] = bytearray()
+                        image_state["prompt"] = ""
+                        image_state["last_chunk_time"] = 0
+                        set_text("Image error!", 0xFF0000)
+                    continue
 
             # React Native's writeWithoutResponse decodes base64 before sending,
             # so we should receive raw UTF-8 bytes. Try UTF-8 first, then base64 as fallback.
@@ -549,21 +621,32 @@ while True:
                 
                 # Check for image command
                 if msg.get("cmd") == "image_start":
-                    # Reset any leftover state from previous incomplete transfers
+                    # ALWAYS reset state when receiving a new image_start
+                    # This handles cases where previous transfer was incomplete
                     if image_state["receiving"]:
-                        print("Warning: Previous image transfer was incomplete, resetting state")
+                        print("Warning: Cancelling previous incomplete transfer")
+                    
+                    # Completely reset all image state
                     image_state["receiving"] = True
                     image_state["width"] = msg.get("w", 0)
                     image_state["height"] = msg.get("h", 0)
                     image_state["expected_len"] = msg.get("len", 0)
-                    image_state["prompt"] = msg.get("prompt", "")  # Store prompt text
-                    image_state["data"] = bytearray()  # Clear any old data
+                    image_state["prompt"] = msg.get("prompt", "")
+                    image_state["data"] = bytearray()  # Fresh buffer
                     image_state["last_chunk_time"] = time.monotonic()
+                    
+                    # Validate the incoming parameters
+                    if image_state["expected_len"] <= 0 or image_state["width"] <= 0 or image_state["height"] <= 0:
+                        print(f"Invalid image params: w={image_state['width']}, h={image_state['height']}, len={image_state['expected_len']}")
+                        image_state["receiving"] = False
+                        set_text("Invalid image!", 0xFF0000)
+                        continue
+                    
                     print(f"Image start: {image_state['width']}x{image_state['height']}, {image_state['expected_len']} bytes")
                     if image_state["prompt"]:
                         print(f"Prompt: {image_state['prompt'][:50]}...")
-                    print(f"Now waiting for {image_state['expected_len']} bytes of image data...")
-                    set_text("Receiving image...", 0xFFFF00)
+                    print(f"Waiting for {image_state['expected_len']} bytes...")
+                    set_text("Receiving...", 0xFFFF00)
                     continue
                 
                 # Regular text message

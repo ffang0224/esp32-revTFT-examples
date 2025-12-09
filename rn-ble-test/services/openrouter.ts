@@ -251,3 +251,62 @@ export const POPULAR_IMAGE_MODELS = [
   { id: "openai/dall-e-2", name: "DALL-E 2" },
   // Note: Models with image generation support may vary
 ];
+
+const HALFTONE_PROMPT_PREFIX = "Simple black and white icon for e-ink display. Bold, clean silhouette. High contrast, no gradients. Single centered object or symbol. Minimal details, thick lines. ";
+
+/**
+ * Generate a prophecy based on a dilemma and two selected values
+ */
+export async function generateProphecy(
+  apiKey: string,
+  dilemma: string,
+  value1: string,
+  value2: string
+): Promise<{ prophecyText: string; imagePrompt: string }> {
+  const systemPrompt = `You are a mystical oracle. Given a dilemma and two values, generate:
+
+1. A PROPHECY (40-60 chars): Cryptic, wise guidance that honors both values. Poetic but meaningful.
+
+2. An IMAGE SUBJECT (3-6 words): A simple, concrete object or symbol. NOT abstract. Think: "a compass", "two hands shaking", "a key and lock", "a rising sun", "a bridge over water". Something that can be drawn as a simple icon.
+
+Respond ONLY in this JSON format:
+{
+  "prophecy": "your prophecy text here",
+  "imagePrompt": "simple concrete object"
+}`;
+
+  const userPrompt = `Dilemma: ${dilemma}
+Value 1: ${value1}
+Value 2: ${value2}`;
+
+  const response = await generateText(
+    apiKey,
+    userPrompt,
+    "openai/gpt-4o-mini",
+    systemPrompt
+  );
+
+  try {
+    const parsed = JSON.parse(response);
+    return {
+      prophecyText: parsed.prophecy || parsed.prophecyText || response,
+      imagePrompt: parsed.imagePrompt || parsed.image_prompt || "crystal ball",
+    };
+  } catch {
+    return {
+      prophecyText: response.slice(0, 60),
+      imagePrompt: "crystal ball",
+    };
+  }
+}
+
+/**
+ * Generate prophecy image based on the prophecy text
+ */
+export async function generateProphecyImage(
+  apiKey: string,
+  imagePrompt: string
+): Promise<string> {
+  const fullPrompt = HALFTONE_PROMPT_PREFIX + imagePrompt;
+  return generateImage(apiKey, fullPrompt, "google/gemini-2.5-flash-image-preview", "1:1");
+}
