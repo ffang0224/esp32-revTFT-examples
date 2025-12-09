@@ -12,6 +12,10 @@ export interface OpenRouterRequest {
   max_tokens?: number;
   temperature?: number;
   modalities?: string[];
+  image_config?: {
+    aspect_ratio?: string;
+    image_size?: string;
+  };
 }
 
 export interface OpenRouterResponse {
@@ -84,7 +88,8 @@ export async function generateText(
 export async function generateImage(
   apiKey: string,
   prompt: string,
-  model: string = "google/gemini-2.5-flash-image-preview" // Use a model that supports image generation
+  model: string = "google/gemini-2.5-flash-image-preview", // Use a model that supports image generation
+  aspectRatio: string = "21:9" // Badge is 250x122 ≈ 2.05:1, closest supported is 21:9 (2.33:1)
 ): Promise<string> {
   // Match the OpenRouter example format exactly
   const messages: OpenRouterMessage[] = [
@@ -99,6 +104,10 @@ export async function generateImage(
     messages,
     modalities: ["image", "text"] as string[], // Explicitly request image generation
     stream: false, // Don't stream the response
+    image_config: {
+      aspect_ratio: aspectRatio,
+      image_size: "1K", // 1024x1024 base, will be scaled by aspect ratio
+    },
   };
 
   console.log("=== OpenRouter Image Generation Request ===");

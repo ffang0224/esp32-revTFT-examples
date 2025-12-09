@@ -35,6 +35,12 @@ const AUTO_CONNECT_DEVICE_ID = "98B09776-ED44-C4D3-1E87-68B04161BDBB";
 
 const manager = new BleManager();
 const API_KEY_STORAGE_KEY = "openrouter_api_key";
+const CONNECTED_DEVICE_STORAGE_KEY = "last_connected_device_id";
+const MAX_CONNECTION_RETRIES = 3;
+const CONNECTION_TIMEOUT = 15000; // Increased from 5000ms
+const SCAN_TIMEOUT = 15000; // Increased from 10000ms
+
+const HALFTONE_PROMPT_PREFIX = "A coarse halftone black-and-white illustration made for a 250×122 e-ink display. Pure 1-bit monochrome, no grayscale. Very large halftone dots arranged on a visible grid. High contrast silhouettes with simplified shapes, strong blacks, and blown-out whites. Sharp edges, no anti-aliasing, no smooth gradients. Retro digital newspaper look, bitmap texture, heavy dithering, blocky pixel clusters. Composition must remain readable at extremely low resolution.\n\n";
 
 export default function IndexScreen() {
   const [isScanning, setIsScanning] = useState(false);
@@ -57,6 +63,9 @@ export default function IndexScreen() {
   const [generationMode, setGenerationMode] = useState<"text" | "image">("text");
   const [generatedImageUrl, setGeneratedImageUrl] = useState<string | null>(null);
   const [isSendingImage, setIsSendingImage] = useState(false);
+  const [imageAspectRatio, setImageAspectRatio] = useState<string>("21:9"); // Default to closest supported ratio to badge (250x122 ≈ 2.05:1, closest is 21:9 = 2.33:1)
+  const [connectionRetryCount, setConnectionRetryCount] = useState(0);
+  const [rssi, setRssi] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -109,6 +118,30 @@ export default function IndexScreen() {
       } catch (e) {
         console.log("Error loading API key:", e);
       }
+
+      // Monitor for device disconnections
+      const deviceDisconnectedSubscription = manager.onDeviceDisconnected(
+        AUTO_CONNECT_DEVICE_ID,
+        (error, device) => {
+          console.log("Device disconnected:", device?.id, error);
+          setConnectedDevice(null);
+          setUartRxChar(null);
+          setRssi(null);
+          // Auto-reconnect after a short delay
+          if (device) {
+            setTimeout(() => {
+              if (!connectedDevice && !isConnecting) {
+                console.log("Attempting auto-reconnect after disconnect");
+                autoConnect();
+              }
+            }, 2000);
+          }
+        }
+      );
+
+      return () => {
+        deviceDisconnectedSubscription.remove();
+      };
     })();
 
     return () => {
@@ -116,9 +149,39 @@ export default function IndexScreen() {
     };
   }, []);
 
-  const handleDeviceConnection = useCallback(async (device: Device) => {
+  const handleDeviceConnection = useCallback(async (device: Device, isRetry: boolean = false) => {
     try {
-      console.log("Low-level connected:", device.id);
+      console.log("Low-level connected:", device.id, isRetry ? "(retry)" : "");
+
+      // Monitor RSSI for connection quality
+      // readRSSI() returns a Device object with updated RSSI property
+      try {
+        const updatedDevice = await device.readRSSI();
+        if (updatedDevice.rssi !== null && updatedDevice.rssi !== undefined) {
+          setRssi(updatedDevice.rssi);
+          console.log("Device RSSI:", updatedDevice.rssi);
+        }
+      } catch (rssiError) {
+        console.log("Could not read RSSI:", rssiError);
+        // RSSI might not be available, that's okay
+      }
+
+      // Set up periodic RSSI monitoring
+      const rssiInterval = setInterval(async () => {
+        try {
+          const isConnected = await device.isConnected();
+          if (isConnected) {
+            const updatedDevice = await device.readRSSI();
+            if (updatedDevice.rssi !== null && updatedDevice.rssi !== undefined) {
+              setRssi(updatedDevice.rssi);
+            }
+          } else {
+            clearInterval(rssiInterval);
+          }
+        } catch (e) {
+          clearInterval(rssiInterval);
+        }
+      }, 5000); // Check RSSI every 5 seconds
 
       await device.discoverAllServicesAndCharacteristics();
 
@@ -149,35 +212,60 @@ export default function IndexScreen() {
       setUartRxChar(rx);
       setIsConnecting(false);
       setAutoconnectFailed(false);
+      setConnectionRetryCount(0);
 
-      console.log("Autoconnected successfully to", device.name || device.id);
+      // Store successful connection
+      try {
+        await SecureStore.setItemAsync(CONNECTED_DEVICE_STORAGE_KEY, device.id);
+      } catch (e) {
+        console.log("Could not save device ID:", e);
+      }
+
+      console.log("Connected successfully to", device.name || device.id);
     } catch (e: any) {
       console.log("Connection setup error:", e);
       try {
         await manager.cancelDeviceConnection(device.id);
       } catch {}
       setIsConnecting(false);
+      throw e; // Re-throw to allow retry logic
     }
   }, []);
 
-  const autoConnect = useCallback(async () => {
+  const autoConnect = useCallback(async (retryCount: number = 0) => {
     if (isConnecting || connectedDevice) return;
 
     try {
-      console.log("Attempting autoconnect to", AUTO_CONNECT_DEVICE_ID);
+      console.log(`Attempting autoconnect to ${AUTO_CONNECT_DEVICE_ID} (attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES + 1})`);
       setAutoconnectFailed(false);
       setIsConnecting(true);
+      setConnectionRetryCount(retryCount);
 
       // Try to connect directly first (works if device was previously connected)
+      // Use exponential backoff for retries
+      const connectionDelay = retryCount > 0 ? Math.min(1000 * Math.pow(2, retryCount - 1), 5000) : 0;
+      if (connectionDelay > 0) {
+        await new Promise(resolve => setTimeout(resolve, connectionDelay));
+      }
+
       try {
         const device = await manager.connectToDevice(AUTO_CONNECT_DEVICE_ID, {
-          timeout: 5000,
+          timeout: CONNECTION_TIMEOUT,
         });
         console.log("Direct connection successful:", device.id);
-        await handleDeviceConnection(device);
+        await handleDeviceConnection(device, retryCount > 0);
         return;
-      } catch (directError) {
-        console.log("Direct connection failed, will scan:", directError);
+      } catch (directError: any) {
+        console.log("Direct connection failed, will scan:", directError.message);
+        // If it's a timeout or connection error, proceed to scan
+        // If it's a different error, might want to retry
+        if (directError.errorCode === 201 || directError.errorCode === 202) {
+          // Connection timeout or device not found - proceed to scan
+        } else if (retryCount < MAX_CONNECTION_RETRIES) {
+          // Retry for other errors
+          console.log(`Retrying connection (${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
+          return autoConnect(retryCount + 1);
+        }
       }
 
       // If direct connection fails, scan for the device
@@ -187,39 +275,87 @@ export default function IndexScreen() {
         setIsScanning(false);
         if (!foundDevice) {
           console.log("Autoconnect: Device not found during scan");
-          setIsConnecting(false);
-          setAutoconnectFailed(true);
-        }
-      }, 10000); // 10 second scan timeout
-
-      setIsScanning(true);
-      manager.startDeviceScan(
-        null,
-        { allowDuplicates: false },
-        (error, device) => {
-          if (error) {
-            console.log("Scan error during autoconnect:", error);
-            clearTimeout(scanTimeout);
-            setIsScanning(false);
+          if (retryCount < MAX_CONNECTION_RETRIES) {
+            console.log(`Retrying scan (${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
+            setTimeout(() => autoConnect(retryCount + 1), 2000);
+          } else {
             setIsConnecting(false);
             setAutoconnectFailed(true);
-            return;
-          }
-
-          if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
-            foundDevice = device;
-            clearTimeout(scanTimeout);
-            manager.stopDeviceScan();
-            setIsScanning(false);
-            handleDeviceConnection(device);
           }
         }
-      );
+      }, SCAN_TIMEOUT);
+
+      setIsScanning(true);
+      
+      // Define scan callback first
+      const scanCallback = (error: BleError | null, device: Device | null) => {
+        if (error) {
+          console.log("Scan error during autoconnect:", error);
+          clearTimeout(scanTimeout);
+          setIsScanning(false);
+          if (retryCount < MAX_CONNECTION_RETRIES) {
+            setTimeout(() => autoConnect(retryCount + 1), 2000);
+          } else {
+            setIsConnecting(false);
+            setAutoconnectFailed(true);
+          }
+          return;
+        }
+
+        if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
+          foundDevice = device;
+          clearTimeout(scanTimeout);
+          manager.stopDeviceScan();
+          setIsScanning(false);
+          handleDeviceConnection(device, retryCount > 0);
+        }
+      };
+      
+      // Try scanning with service UUID filter first (more efficient)
+      try {
+        manager.startDeviceScan(
+          [UART_SERVICE_UUID],
+          { allowDuplicates: false },
+          (error, device) => {
+            if (error) {
+              console.log("Scan error during autoconnect:", error);
+              // Fall back to scanning all devices
+              manager.stopDeviceScan();
+              manager.startDeviceScan(
+                null,
+                { allowDuplicates: false },
+                scanCallback
+              );
+              return;
+            }
+
+            if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
+              foundDevice = device;
+              clearTimeout(scanTimeout);
+              manager.stopDeviceScan();
+              setIsScanning(false);
+              handleDeviceConnection(device, retryCount > 0);
+            }
+          }
+        );
+      } catch (scanError) {
+        // If service UUID scan fails, fall back to scanning all devices
+        console.log("Service UUID scan failed, scanning all devices:", scanError);
+        manager.startDeviceScan(
+          null,
+          { allowDuplicates: false },
+          scanCallback
+        );
+      }
     } catch (e: any) {
       console.log("Autoconnect error:", e);
-      setIsConnecting(false);
-      setIsScanning(false);
-      setAutoconnectFailed(true);
+      if (retryCount < MAX_CONNECTION_RETRIES) {
+        setTimeout(() => autoConnect(retryCount + 1), 2000);
+      } else {
+        setIsConnecting(false);
+        setIsScanning(false);
+        setAutoconnectFailed(true);
+      }
     }
   }, [isConnecting, connectedDevice, handleDeviceConnection]);
 
@@ -228,9 +364,10 @@ export default function IndexScreen() {
       console.log("BLE State updated:", state);
       if (state === "PoweredOn") {
         // Auto-connect to the target device
+        // Reduced delay - BLE is usually ready faster
         setTimeout(() => {
-          autoConnect();
-        }, 1000); // Small delay to ensure BLE is fully ready
+          autoConnect(0);
+        }, 500); // Reduced from 1000ms
       }
     }, true);
 
@@ -276,43 +413,67 @@ export default function IndexScreen() {
     setDevices({});
     setIsScanning(true);
 
-    try {
-      // Scan for all devices (null)
+    // Define scan callback function first
+    const startAllDeviceScan = () => {
       manager.startDeviceScan(
         null,
-        { allowDuplicates: true },
+        { allowDuplicates: false }, // Changed to false for better performance
         (error, device) => {
           if (error) {
-            // Handle specific iOS error for "scanning too frequently" or "powered off"
             console.log("Scan callback error:", error);
             if (error.errorCode === 601) { // Location services disabled on Android
-                // Handle location error
+              Alert.alert("Location Required", "Please enable location services for Bluetooth scanning.");
+            } else {
+              Alert.alert("Scan Error", error.message);
             }
-            
-            Alert.alert("Scan Error", error.message);
             setIsScanning(false);
             manager.stopDeviceScan();
             return;
           }
           
           if (device) {
-            // Log only unique devices to avoid console spam
-            // console.log("Scanned:", device.id, device.name);
-            
             setDevices((prev) => {
-              // Only update if new or name changed
               if (prev[device.id] && prev[device.id].name === device.name) return prev;
-               
-              // Log when we find a new device or one with a name
               if (!prev[device.id] || (!prev[device.id].name && device.name)) {
-                 console.log("New/Updated Device:", device.id, device.name, device.localName);
+                console.log("New/Updated Device:", device.id, device.name, device.localName);
               }
-              
               return { ...prev, [device.id]: device };
             });
           }
         }
       );
+    };
+
+    try {
+      // Try scanning with service UUID filter first (more efficient and faster)
+      try {
+        manager.startDeviceScan(
+          [UART_SERVICE_UUID],
+          { allowDuplicates: false },
+          (error, device) => {
+            if (error) {
+              console.log("Service UUID scan error, falling back to all devices:", error);
+              // Fall back to scanning all devices
+              manager.stopDeviceScan();
+              startAllDeviceScan();
+              return;
+            }
+            
+            if (device) {
+              setDevices((prev) => {
+                if (prev[device.id] && prev[device.id].name === device.name) return prev;
+                if (!prev[device.id] || (!prev[device.id].name && device.name)) {
+                  console.log("New/Updated Device:", device.id, device.name, device.localName);
+                }
+                return { ...prev, [device.id]: device };
+              });
+            }
+          }
+        );
+      } catch (serviceScanError) {
+        console.log("Service UUID scan not supported, scanning all devices:", serviceScanError);
+        startAllDeviceScan();
+      }
     } catch (err: any) {
       console.error("startDeviceScan exception:", err);
       Alert.alert("Start Scan Exception", err.message);
@@ -339,7 +500,7 @@ export default function IndexScreen() {
       console.log("Connecting to", device.id, device.name);
 
       const connected = await manager.connectToDevice(device.id, {
-        timeout: 8000,
+        timeout: CONNECTION_TIMEOUT, // Use same timeout as autoconnect
       });
 
       await handleDeviceConnection(connected);
@@ -347,7 +508,7 @@ export default function IndexScreen() {
 
       Alert.alert(
         "Connected",
-        `Connected to ${connected.name || connected.id}`
+        `Connected to ${connected.name || connected.id}${rssi ? `\nSignal: ${rssi} dBm` : ""}`
       );
     } catch (e: any) {
       const bleErr = e as BleError;
@@ -369,10 +530,18 @@ export default function IndexScreen() {
         await manager.cancelDeviceConnection(device.id);
       } catch {}
 
-      Alert.alert(
-        "Connection failed",
-        bleErr.message || "Could not connect to device."
-      );
+      let errorMessage = bleErr.message || "Could not connect to device.";
+      
+      // Provide more helpful error messages
+      if (bleErr.errorCode === 201) {
+        errorMessage = "Connection timeout. Make sure the device is nearby and powered on.";
+      } else if (bleErr.errorCode === 202) {
+        errorMessage = "Device not found. Try scanning again.";
+      } else if (bleErr.errorCode === 203) {
+        errorMessage = "Device disconnected. Please try again.";
+      }
+
+      Alert.alert("Connection failed", errorMessage);
     } finally {
       setIsConnecting(false);
     }
@@ -446,7 +615,9 @@ export default function IndexScreen() {
         Alert.alert("Sent!", "Prediction generated and sent to badge");
       } else {
         // IMAGE MODE
-        const imageUrl = await generateImage(apiKey, aiPrompt);
+        // Prepend halftone prompt prefix to user's input
+        const fullPrompt = HALFTONE_PROMPT_PREFIX + aiPrompt;
+        const imageUrl = await generateImage(apiKey, fullPrompt, "google/gemini-2.5-flash-image-preview", imageAspectRatio);
         console.log("Generated Image URL:", imageUrl);
         setGeneratedImageUrl(imageUrl);
       }
@@ -479,48 +650,31 @@ export default function IndexScreen() {
         console.log("Re-acquiring UART characteristic...");
         await connectedDevice.discoverAllServicesAndCharacteristics();
         const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
-        char = chars.find(
+        const foundChar = chars.find(
           (c) =>
             c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
             (c.isWritableWithoutResponse || c.isWritableWithResponse)
         );
-        if (!char) {
+        if (!foundChar) {
           throw new Error("UART RX characteristic not found");
         }
-        setUartRxChar(char);
+        char = foundChar;
+        setUartRxChar(foundChar);
       }
 
-      // Small delay to ensure previous image processing is complete
-      await new Promise(resolve => setTimeout(resolve, 300));
-      // 1. First, get the original image dimensions to calculate aspect ratio
-      const originalResponse = await fetch(generatedImageUrl);
-      const originalArrayBuffer = await originalResponse.arrayBuffer();
-      const originalPng = UPNG.decode(originalArrayBuffer);
-      const originalAspectRatio = originalPng.width / originalPng.height;
+      // Small delay to ensure previous image processing is complete on device
+      // Also gives BLE stack time to clear any pending operations
+      await new Promise(resolve => setTimeout(resolve, 500));
       
-      // 2. Calculate dimensions that fit within 250x122 while preserving aspect ratio
-      const maxWidth = 250;
-      const maxHeight = 122;
-      let targetWidth = maxWidth;
-      let targetHeight = maxHeight;
+      // 1. Resize image to square (122x122) for left side of split display
+      // Display is 250x122, so left side will be 122x122 (square), right side 128x122 for text
+      const squareSize = 122;
+      console.log(`Resizing image to square: ${squareSize}x${squareSize}`);
       
-      if (originalAspectRatio > maxWidth / maxHeight) {
-        // Image is wider - constrain by width
-        targetWidth = maxWidth;
-        targetHeight = Math.round(maxWidth / originalAspectRatio);
-      } else {
-        // Image is taller - constrain by height
-        targetHeight = maxHeight;
-        targetWidth = Math.round(maxHeight * originalAspectRatio);
-      }
-      
-      console.log(`Original: ${originalPng.width}x${originalPng.height}, Aspect: ${originalAspectRatio.toFixed(2)}`);
-      console.log(`Resizing to: ${targetWidth}x${targetHeight} (preserving aspect ratio)`);
-      
-      // 3. Resize preserving aspect ratio
+      // 2. Resize to square (crops to center if needed)
       const manipResult = await manipulateAsync(
         generatedImageUrl,
-        [{ resize: { width: targetWidth, height: targetHeight } }],
+        [{ resize: { width: squareSize, height: squareSize } }],
         { compress: 1, format: SaveFormat.PNG, base64: false }
       );
 
@@ -546,6 +700,24 @@ export default function IndexScreen() {
         const b = data[i * 4 + 2];
         // Use ITU-R BT.709 luminance weights for better quality
         grayscale[i] = r * 0.2126 + g * 0.7152 + b * 0.0722;
+      }
+
+      // 6.5. Apply contrast enhancement for better e-ink display
+      // Find min/max for adaptive contrast
+      let min = 255, max = 0;
+      for (let i = 0; i < grayscale.length; i++) {
+        if (grayscale[i] < min) min = grayscale[i];
+        if (grayscale[i] > max) max = grayscale[i];
+      }
+      
+      // Apply contrast stretch if there's room for improvement
+      if (max - min > 50) {
+        const contrastFactor = 255 / (max - min);
+        for (let i = 0; i < grayscale.length; i++) {
+          grayscale[i] = (grayscale[i] - min) * contrastFactor;
+          // Clamp to 0-255
+          grayscale[i] = Math.max(0, Math.min(255, grayscale[i]));
+        }
       }
 
       // 7. Apply Floyd-Steinberg dithering for better visual quality
@@ -588,12 +760,13 @@ export default function IndexScreen() {
         }
       }
 
-      // 5. Send Start Command
+      // 5. Send Start Command with prompt text
       const startCmd = JSON.stringify({ 
         cmd: "image_start", 
         w: width, 
         h: height,
-        len: binaryData.length 
+        len: binaryData.length,
+        prompt: aiPrompt.trim() // Include the prompt text
       }) + "\n";
       
       // Verify char is still valid before sending
@@ -629,14 +802,15 @@ export default function IndexScreen() {
           try {
             await connectedDevice.discoverAllServicesAndCharacteristics();
             const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
-            char = chars.find(
+            const foundChar = chars.find(
               (c) =>
                 c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
                 (c.isWritableWithoutResponse || c.isWritableWithResponse)
             );
-            if (char) {
-              setUartRxChar(char);
-              await char.writeWithoutResponse(base64Chunk);
+            if (foundChar) {
+              char = foundChar;
+              setUartRxChar(foundChar);
+              await foundChar.writeWithoutResponse(base64Chunk);
             } else {
               throw new Error("Could not re-acquire characteristic");
             }
@@ -650,8 +824,8 @@ export default function IndexScreen() {
         await new Promise(resolve => setTimeout(resolve, 30));
       }
 
-      console.log(`Image sent completely: ${width}x${height} (aspect ratio preserved)`);
-      Alert.alert("Success", `Image sent to badge!\n${width}x${height} (centered on display)`);
+      console.log(`Image sent completely: ${width}x${height} (square, left side with prompt on right)`);
+      Alert.alert("Success", `Image sent to badge!\n${width}x${height} square (left) + prompt (right)`);
       
     } catch (e: any) {
       console.error("Send Image Error:", e);
@@ -673,9 +847,9 @@ export default function IndexScreen() {
             <View style={[styles.statusDot, connectedDevice && styles.statusDotConnected]} />
             <Text style={styles.statusText}>
               {connectedDevice
-                ? "Connected"
+                ? `Connected${rssi !== null ? ` (${rssi} dBm)` : ""}`
                 : isConnecting
-                ? "Connecting..."
+                ? `Connecting...${connectionRetryCount > 0 ? ` (${connectionRetryCount + 1})` : ""}`
                 : "Disconnected"}
             </Text>
           </View>
@@ -709,6 +883,9 @@ export default function IndexScreen() {
 
               {deviceList.length > 0 && (
                 <View style={styles.deviceList}>
+                  <Text style={styles.deviceListHeader}>
+                    Found {deviceList.length} device{deviceList.length !== 1 ? 's' : ''}
+                  </Text>
                   {deviceList.map((item) => {
                     const isLikelyBadge = (item.name && item.name.includes("Fausto")) || 
                                           ((item as any).localName && (item as any).localName.includes("Fausto"));
@@ -720,11 +897,16 @@ export default function IndexScreen() {
                         onPress={() => connectToDevice(item)}
                         disabled={isConnecting}
                       >
-                        <Text style={styles.deviceName}>
-                          {item.name || (item as any).localName || "Unnamed Device"}
-                          {isLikelyBadge && " ⭐"}
-                        </Text>
-                        <Text style={styles.deviceId}>{item.id.slice(0, 8)}...</Text>
+                        <View style={styles.deviceItemContent}>
+                          <Text style={styles.deviceName}>
+                            {item.name || (item as any).localName || "Unnamed Device"}
+                            {isLikelyBadge && " ⭐"}
+                          </Text>
+                          <Text style={styles.deviceId}>{item.id}</Text>
+                          {item.rssi !== null && item.rssi !== undefined && (
+                            <Text style={styles.deviceRssi}>Signal: {item.rssi} dBm</Text>
+                          )}
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -784,6 +966,41 @@ export default function IndexScreen() {
                 placeholderTextColor="#999"
               />
 
+              {/* Aspect Ratio Selector for Image Mode */}
+              {generationMode === "image" && (
+                <View style={styles.aspectRatioContainer}>
+                  <Text style={styles.label}>Aspect Ratio</Text>
+                  <View style={styles.aspectRatioButtons}>
+                    {[
+                      { value: "21:9", label: "Badge (21:9)", description: "Closest to badge display" },
+                      { value: "16:9", label: "Wide (16:9)", description: "Landscape" },
+                      { value: "1:1", label: "Square (1:1)", description: "Classic" },
+                      { value: "4:3", label: "Standard (4:3)", description: "Traditional" },
+                      { value: "3:4", label: "Portrait (3:4)", description: "Vertical" },
+                    ].map((ratio) => (
+                      <TouchableOpacity
+                        key={ratio.value}
+                        style={[
+                          styles.aspectRatioButton,
+                          imageAspectRatio === ratio.value && styles.aspectRatioButtonActive,
+                        ]}
+                        onPress={() => setImageAspectRatio(ratio.value)}
+                      >
+                        <Text
+                          style={[
+                            styles.aspectRatioButtonText,
+                            imageAspectRatio === ratio.value && styles.aspectRatioButtonTextActive,
+                          ]}
+                        >
+                          {ratio.label}
+                        </Text>
+                        <Text style={styles.aspectRatioDescription}>{ratio.description}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
               <TouchableOpacity
                 style={[styles.primaryButton, (isGenerating || !aiPrompt.trim()) && styles.primaryButtonDisabled]}
                 onPress={generateAIContent}
@@ -802,12 +1019,20 @@ export default function IndexScreen() {
               {/* Image Preview & Send */}
               {generationMode === "image" && generatedImageUrl && (
                 <View style={styles.imagePreviewContainer}>
-                  <Text style={styles.label}>Preview:</Text>
-                  <Image 
-                    source={{ uri: generatedImageUrl }} 
-                    style={styles.generatedImage} 
-                    resizeMode="contain"
-                  />
+                  <Text style={styles.label}>Preview (Badge: 250×122px):</Text>
+                  <View style={styles.badgePreviewFrame}>
+                    <Image 
+                      source={{ uri: generatedImageUrl }} 
+                      style={styles.generatedImage} 
+                      resizeMode="contain"
+                    />
+                    <View style={styles.badgePreviewOverlay}>
+                      <Text style={styles.badgePreviewText}>Badge Display Area</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.hint}>
+                    Image will be resized to fit badge display while preserving aspect ratio
+                  </Text>
                   <TouchableOpacity
                     style={[styles.primaryButton, styles.sendImageButton, (!connectedDevice || isSendingImage) && styles.primaryButtonDisabled]}
                     onPress={sendImageToBadge}
@@ -1055,6 +1280,13 @@ const styles = StyleSheet.create({
   deviceList: {
     marginTop: 16,
   },
+  deviceListHeader: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 12,
+    textAlign: "center",
+  },
   deviceItem: {
     padding: 16,
     borderWidth: 1,
@@ -1068,6 +1300,9 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     backgroundColor: "#eef2ff",
   },
+  deviceItemContent: {
+    flex: 1,
+  },
   deviceName: {
     fontWeight: "600",
     fontSize: 16,
@@ -1075,9 +1310,15 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   deviceId: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#999",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+    marginBottom: 4,
+  },
+  deviceRssi: {
+    fontSize: 12,
+    color: "#666",
+    fontStyle: "italic",
   },
   hint: {
     fontSize: 13,
@@ -1199,14 +1440,77 @@ const styles = StyleSheet.create({
     marginTop: 16,
     alignItems: "center",
   },
-  generatedImage: {
+  badgePreviewFrame: {
     width: 250,
     height: 122,
-    backgroundColor: "#e0e0e0",
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#ccc",
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: "#6366f1",
+    borderStyle: "dashed",
     marginBottom: 12,
+    position: "relative",
+    overflow: "hidden",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  generatedImage: {
+    width: "100%",
+    height: "100%",
+  },
+  badgePreviewOverlay: {
+    position: "absolute",
+    bottom: 4,
+    left: 4,
+    right: 4,
+    backgroundColor: "rgba(99, 102, 241, 0.8)",
+    padding: 4,
+    borderRadius: 4,
+  },
+  badgePreviewText: {
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: "600",
+    textAlign: "center",
+  },
+  aspectRatioContainer: {
+    marginTop: 12,
+    marginBottom: 12,
+  },
+  aspectRatioButtons: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: 8,
+  },
+  aspectRatioButton: {
+    flex: 1,
+    minWidth: "30%",
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: "#f1f5f9",
+    borderWidth: 1,
+    borderColor: "#e2e8f0",
+    alignItems: "center",
+  },
+  aspectRatioButtonActive: {
+    backgroundColor: "#eef2ff",
+    borderColor: "#6366f1",
+    borderWidth: 2,
+  },
+  aspectRatioButtonText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#64748b",
+    marginBottom: 2,
+  },
+  aspectRatioButtonTextActive: {
+    color: "#6366f1",
+  },
+  aspectRatioDescription: {
+    fontSize: 10,
+    color: "#94a3b8",
+    textAlign: "center",
   },
   sendImageButton: {
     width: "100%",
