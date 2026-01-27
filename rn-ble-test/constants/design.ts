@@ -31,55 +31,44 @@ export const borderRadius = {
 };
 
 export const fonts = {
-  regular: Platform.select({
-    ios: "System",
-    android: "Roboto",
-    default: "System",
-  }),
-  medium: Platform.select({
-    ios: "System",
-    android: "Roboto",
-    default: "System",
-  }),
-  semibold: Platform.select({
-    ios: "System",
-    android: "Roboto",
-    default: "System",
-  }),
+  regular: "InstrumentSans-Regular",
+  medium: "InstrumentSans-Medium",
+  semibold: "InstrumentSans-SemiBold",
+  bold: "InstrumentSans-Bold",
 };
 
 export const typography = {
   title: {
     fontSize: 32,
-    fontWeight: "600" as const,
+    fontFamily: fonts.semibold,
     color: colors.text,
     letterSpacing: -0.5,
   },
   heading: {
     fontSize: 24,
-    fontWeight: "600" as const,
+    fontFamily: fonts.semibold,
     color: colors.text,
     letterSpacing: -0.3,
   },
   subheading: {
     fontSize: 18,
-    fontWeight: "600" as const,
+    fontFamily: fonts.semibold,
     color: colors.text,
   },
   body: {
     fontSize: 16,
-    fontWeight: "400" as const,
+    fontFamily: fonts.regular,
     color: colors.text,
     lineHeight: 24,
   },
   caption: {
     fontSize: 13,
-    fontWeight: "500" as const,
+    fontFamily: fonts.medium,
     color: colors.textMuted,
   },
   small: {
     fontSize: 12,
-    fontWeight: "400" as const,
+    fontFamily: fonts.regular,
     color: colors.textMuted,
   },
 };

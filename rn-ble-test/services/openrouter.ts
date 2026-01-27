@@ -252,7 +252,8 @@ export const POPULAR_IMAGE_MODELS = [
   // Note: Models with image generation support may vary
 ];
 
-const HALFTONE_PROMPT_PREFIX = "Simple black and white icon for e-ink display. Bold, clean silhouette. High contrast, no gradients. Single centered object or symbol. Minimal details, thick lines. ";
+const HALFTONE_PROMPT_PREFIX =
+  "A coarse halftone black-and-white illustration made for a 250×122 e-ink display. Pure 1-bit monochrome, no grayscale. Realistic style, very large halftone dots arranged on a visible grid. High contrast silhouettes with simplified shapes, strong blacks, and blown-out whites. Sharp edges, no anti-aliasing, no smooth gradients. Bitmap texture, heavy dithering, blocky pixel clusters. Composition must remain good quality at extremely low resolution.";
 
 /**
  * Generate a prophecy based on a dilemma and two selected values
@@ -263,16 +264,33 @@ export async function generateProphecy(
   value1: string,
   value2: string
 ): Promise<{ prophecyText: string; imagePrompt: string }> {
-  const systemPrompt = `You are a mystical oracle. Given a dilemma and two values, generate:
+  const systemPrompt = `You are an oracle generating ONE prophecy at a time.
 
-1. A PROPHECY (40-60 chars): Cryptic, wise guidance that honors both values. Poetic but meaningful.
+Each prophecy must reveal ONE emotionally honest outcome that emerges from a combination of TWO values. The prophecy's purpose is to help the seeker understand their dilemma by FEELING one possible future.
 
-2. An IMAGE SUBJECT (3-6 words): A simple, concrete object or symbol. NOT abstract. Think: "a compass", "two hands shaking", "a key and lock", "a rising sun", "a bridge over water". Something that can be drawn as a simple icon.
+The prophecy must function as:
+- A PRESSURE POINT — touching a sensitive truth
+- A REVEALING ANGLE — showing the dilemma from an unexpected side
+- A SMALL FICTION that unlocks a big feeling — short, but emotionally resonant
+
+Conflicts between values are ALLOWED. When they appear, the prophecy must highlight that tension clearly.
+- Harmony between values should feel grounding or affirming
+- Tension between values should feel sharp or unsettling
+
+PROPHECY RULES:
+- Maximum 80 characters, ONE sentence
+- Fortune-cookie-style oracle whisper
+- State ONE concrete outcome of choosing
+- Clear, direct, and emotionally evocative
+- Reveal either HARMONY or CONFLICT between the values
+- Offer REFLECTION, not advice
+
+IMAGE SUBJECT (10-30 words): A concrete visual scene that captures the prophecy's emotional core. NOT abstract symbols. Think: "a person standing at a crossroads at dusk", "hands releasing a bird into fog", "an empty chair facing two doors". Evocative but drawable.
 
 Respond ONLY in this JSON format:
 {
   "prophecy": "your prophecy text here",
-  "imagePrompt": "simple concrete object"
+  "imagePrompt": "concrete visual scene"
 }`;
 
   const userPrompt = `Dilemma: ${dilemma}
@@ -294,8 +312,8 @@ Value 2: ${value2}`;
     };
   } catch {
     return {
-      prophecyText: response.slice(0, 60),
-      imagePrompt: "crystal ball",
+      prophecyText: response.slice(0, 80),
+      imagePrompt: "an empty chair facing two doors",
     };
   }
 }

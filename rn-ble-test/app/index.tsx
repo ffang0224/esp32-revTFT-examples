@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useBle, useDilemma } from "../contexts";
-import { colors, spacing, borderRadius, typography, shadows } from "../constants/design";
+import { colors, spacing, borderRadius, fonts, shadows } from "../constants/design";
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get("window");
 
@@ -27,12 +27,11 @@ export default function DilemmaScreen() {
   // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const headerTranslateY = useRef(new Animated.Value(-20)).current;
-  const stickyNoteScale = useRef(new Animated.Value(0.8)).current;
-  const stickyNoteOpacity = useRef(new Animated.Value(0)).current;
-  const mainCardScale = useRef(new Animated.Value(0.9)).current;
-  const mainCardOpacity = useRef(new Animated.Value(0)).current;
+  const dilemmaCardScale = useRef(new Animated.Value(0.8)).current;
+  const dilemmaCardOpacity = useRef(new Animated.Value(0)).current;
+  const createCardScale = useRef(new Animated.Value(0.9)).current;
+  const createCardOpacity = useRef(new Animated.Value(0)).current;
   const createFadeOpacity = useRef(new Animated.Value(1)).current;
-  const contentFadeOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     // Staggered entrance animations
@@ -52,29 +51,29 @@ export default function DilemmaScreen() {
           easing: Easing.out(Easing.cubic),
         }),
       ]),
-      // Sticky note bounces in
+      // Dilemma card bounces in (if exists)
       Animated.parallel([
-        Animated.spring(stickyNoteScale, {
+        Animated.spring(dilemmaCardScale, {
           toValue: 1,
           tension: 100,
           friction: 10,
           useNativeDriver: true,
         }),
-        Animated.timing(stickyNoteOpacity, {
+        Animated.timing(dilemmaCardOpacity, {
           toValue: 1,
           duration: 300,
           useNativeDriver: true,
         }),
       ]),
-      // Main card fades in
+      // Create card fades in
       Animated.parallel([
-        Animated.spring(mainCardScale, {
+        Animated.spring(createCardScale, {
           toValue: 1,
           tension: 100,
           friction: 10,
           useNativeDriver: true,
         }),
-        Animated.timing(mainCardOpacity, {
+        Animated.timing(createCardOpacity, {
           toValue: 1,
           duration: 400,
           useNativeDriver: true,
@@ -88,7 +87,6 @@ export default function DilemmaScreen() {
     setIsCreating(true);
     
     Animated.sequence([
-      // Fade out the "+" create content
       Animated.timing(createFadeOpacity, {
         toValue: 0,
         duration: 300,
@@ -112,14 +110,11 @@ export default function DilemmaScreen() {
     }
   };
 
-  const handleStickyNotePress = () => {
-    // Cycle through dilemmas or show gallery
+  const handleCycleDilemma = () => {
     if (dilemmas.length > 1) {
       const currentIndex = dilemmas.findIndex(d => d.id === currentDilemma?.id);
       const nextIndex = (currentIndex + 1) % dilemmas.length;
       setCurrentDilemma(dilemmas[nextIndex]);
-    } else if (dilemmas.length === 1) {
-      handleDilemmaPress();
     }
   };
 
@@ -202,59 +197,24 @@ export default function DilemmaScreen() {
 
       {/* Main Content */}
       <View style={styles.content}>
-        {/* Top Sticky Note Preview */}
-        <Animated.View
-          style={[
-            styles.stickyNoteContainer,
-            {
-              opacity: stickyNoteOpacity,
-              transform: [{ scale: stickyNoteScale }],
-            },
-          ]}
-        >
-          <TouchableOpacity 
-            style={styles.stickyNote}
-            onPress={handleStickyNotePress}
-            activeOpacity={0.9}
+        {/* Yellow Sticky Note - Existing Dilemma (only shown when exists) */}
+        {hasDilemma && (
+          <Animated.View
+            style={[
+              styles.dilemmaCardContainer,
+              {
+                opacity: dilemmaCardOpacity,
+                transform: [{ scale: dilemmaCardScale }],
+              },
+            ]}
           >
-            {hasDilemma && currentDilemma.prophecy?.text ? (
-              <Text style={styles.stickyNoteText} numberOfLines={3}>
-                {currentDilemma.prophecy.text.substring(0, 60)}...
-              </Text>
-            ) : (
-              <View style={styles.stickyNoteEmpty} />
-            )}
-          </TouchableOpacity>
-          {dilemmas.length > 1 && (
-            <View style={styles.dilemmaCounter}>
-              <Text style={styles.dilemmaCounterText}>
-                {dilemmas.findIndex(d => d.id === currentDilemma?.id) + 1}/{dilemmas.length}
-              </Text>
-            </View>
-          )}
-        </Animated.View>
-
-        {/* Main Dilemma Card */}
-        <Animated.View
-          style={[
-            styles.mainCardContainer,
-            {
-              opacity: mainCardOpacity,
-              transform: [{ scale: mainCardScale }],
-            },
-          ]}
-        >
-          <TouchableOpacity
-            style={styles.mainCard}
-            onPress={hasDilemma ? handleDilemmaPress : handleCreateNew}
-            activeOpacity={0.9}
-          >
-            {hasDilemma ? (
-              // Show existing dilemma
-              <Animated.View style={[styles.dilemmaContent, { opacity: contentFadeOpacity.interpolate({
-                inputRange: [0, 1],
-                outputRange: [1, 1],
-              }) }]}>
+            <TouchableOpacity
+              style={styles.dilemmaCard}
+              onPress={handleDilemmaPress}
+              onLongPress={handleCycleDilemma}
+              activeOpacity={0.9}
+            >
+              <View style={styles.dilemmaContent}>
                 <View style={styles.dilemmaHeader}>
                   {currentDilemma.prophecy?.text && (
                     <View style={styles.prophecyBadge}>
@@ -263,7 +223,7 @@ export default function DilemmaScreen() {
                   )}
                 </View>
                 <View style={styles.dilemmaBody}>
-                  <Text style={styles.dilemmaText} numberOfLines={6}>
+                  <Text style={styles.dilemmaText} numberOfLines={4}>
                     {currentDilemma.text}
                   </Text>
                 </View>
@@ -271,34 +231,43 @@ export default function DilemmaScreen() {
                   <Text style={styles.dilemmaDate}>
                     {formatDate(currentDilemma.createdAt)}
                   </Text>
-                  <Text style={styles.tapHint}>Tap to view</Text>
+                  {dilemmas.length > 1 && (
+                    <Text style={styles.dilemmaCounter}>
+                      {dilemmas.findIndex(d => d.id === currentDilemma?.id) + 1}/{dilemmas.length}
+                    </Text>
+                  )}
                 </View>
-              </Animated.View>
-            ) : (
-              // Show create new
-              <Animated.View style={[styles.createContent, { opacity: createFadeOpacity }]}>
-                <View style={styles.plusIconContainer}>
-                  <Text style={styles.plusIcon}>+</Text>
-                </View>
-                <View style={styles.createTextContainer}>
-                  <Text style={styles.createTitle}>Solve</Text>
-                  <Text style={styles.createSubtitle}>a dilemma</Text>
-                </View>
-              </Animated.View>
-            )}
+              </View>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        {/* White/Cream Card - Create New */}
+        <Animated.View
+          style={[
+            hasDilemma ? styles.createCardContainerSmall : styles.createCardContainerFull,
+            {
+              opacity: createCardOpacity,
+              transform: [{ scale: createCardScale }],
+            },
+          ]}
+        >
+          <TouchableOpacity
+            style={styles.createCard}
+            onPress={handleCreateNew}
+            activeOpacity={0.9}
+          >
+            <Animated.View style={[styles.createContent, { opacity: createFadeOpacity }]}>
+              <View style={styles.plusIconContainer}>
+                <Text style={styles.plusIcon}>+</Text>
+              </View>
+              <View style={styles.createTextContainer}>
+                <Text style={styles.createTitle}>Solve</Text>
+                <Text style={styles.createSubtitle}>a dilemma</Text>
+              </View>
+            </Animated.View>
           </TouchableOpacity>
         </Animated.View>
-
-        {/* Create New Button (when there's already a dilemma) */}
-        {hasDilemma && (
-          <TouchableOpacity
-            style={styles.newDilemmaButton}
-            onPress={handleCreateNew}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.newDilemmaButtonText}>+ New Dilemma</Text>
-          </TouchableOpacity>
-        )}
       </View>
     </SafeAreaView>
   );
@@ -331,7 +300,7 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontFamily: fonts.medium,
   },
   statusLoader: {
     marginLeft: spacing.sm,
@@ -353,83 +322,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
-  // Sticky Note Preview
-  stickyNoteContainer: {
+  // Yellow Sticky Note - Existing Dilemma
+  dilemmaCardContainer: {
     marginBottom: spacing.lg,
   },
-  stickyNote: {
-    width: 120,
-    height: 80,
+  dilemmaCard: {
     backgroundColor: "#FEF3C7", // Amber/yellow
-    borderRadius: borderRadius.sm,
-    padding: spacing.md,
-    ...shadows.md,
-  },
-  stickyNoteEmpty: {
-    flex: 1,
-  },
-  stickyNoteText: {
-    fontSize: 10,
-    color: colors.text,
-    lineHeight: 14,
-    fontWeight: "500",
-  },
-  dilemmaCounter: {
-    position: "absolute",
-    bottom: -8,
-    right: 8,
-    backgroundColor: colors.accent,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: borderRadius.full,
-  },
-  dilemmaCounterText: {
-    fontSize: 10,
-    color: colors.card,
-    fontWeight: "600",
-  },
-  // Main Card
-  mainCardContainer: {
-    flex: 1,
-    maxHeight: screenHeight * 0.55,
-  },
-  mainCard: {
-    flex: 1,
-    backgroundColor: "#F5F5F0", // Cream/off-white
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.md,
     padding: spacing.lg,
+    minHeight: 160,
     ...shadows.md,
   },
-  // Create New Content
-  createContent: {
-    flex: 1,
-    justifyContent: "space-between",
-  },
-  plusIconContainer: {
-    alignItems: "flex-start",
-  },
-  plusIcon: {
-    fontSize: 48,
-    fontWeight: "300",
-    color: colors.text,
-    lineHeight: 56,
-  },
-  createTextContainer: {
-    marginBottom: spacing.md,
-  },
-  createTitle: {
-    fontSize: 28,
-    fontWeight: "500",
-    color: colors.text,
-    letterSpacing: -0.5,
-  },
-  createSubtitle: {
-    fontSize: 28,
-    fontWeight: "500",
-    color: colors.text,
-    letterSpacing: -0.5,
-  },
-  // Existing Dilemma Content
   dilemmaContent: {
     flex: 1,
     justifyContent: "space-between",
@@ -439,26 +342,26 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   prophecyBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.06)",
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: "rgba(0,0,0,0.08)",
     justifyContent: "center",
     alignItems: "center",
   },
   prophecyBadgeText: {
-    fontSize: 16,
+    fontSize: 14,
   },
   dilemmaBody: {
     flex: 1,
     justifyContent: "center",
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
   },
   dilemmaText: {
-    fontSize: 20,
-    fontWeight: "500",
+    fontSize: 18,
+    fontFamily: fonts.medium,
     color: colors.text,
-    lineHeight: 28,
+    lineHeight: 26,
     letterSpacing: -0.3,
   },
   dilemmaFooter: {
@@ -467,29 +370,57 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   dilemmaDate: {
-    fontSize: 13,
+    fontSize: 12,
+    fontFamily: fonts.regular,
     color: colors.textMuted,
-    fontWeight: "500",
   },
-  tapHint: {
-    fontSize: 13,
+  dilemmaCounter: {
+    fontSize: 12,
+    fontFamily: fonts.medium,
     color: colors.textMuted,
-    fontWeight: "500",
   },
-  // New Dilemma Button
-  newDilemmaButton: {
-    marginTop: spacing.lg,
-    marginBottom: spacing.xl,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-    backgroundColor: colors.accent,
-    borderRadius: borderRadius.full,
-    alignItems: "center",
-    ...shadows.sm,
+  // White/Cream Card - Create New
+  createCardContainerFull: {
+    flex: 1,
+    maxHeight: screenHeight * 0.6,
   },
-  newDilemmaButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: colors.card,
+  createCardContainerSmall: {
+    flex: 1,
+    maxHeight: screenHeight * 0.45,
+  },
+  createCard: {
+    flex: 1,
+    backgroundColor: "#F5F5F0", // Cream/off-white
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    ...shadows.md,
+  },
+  createContent: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  plusIconContainer: {
+    alignItems: "flex-start",
+  },
+  plusIcon: {
+    fontSize: 48,
+    fontFamily: fonts.regular,
+    color: colors.text,
+    lineHeight: 56,
+  },
+  createTextContainer: {
+    marginBottom: spacing.md,
+  },
+  createTitle: {
+    fontSize: 28,
+    fontFamily: fonts.medium,
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  createSubtitle: {
+    fontSize: 28,
+    fontFamily: fonts.medium,
+    color: colors.text,
+    letterSpacing: -0.5,
   },
 });
