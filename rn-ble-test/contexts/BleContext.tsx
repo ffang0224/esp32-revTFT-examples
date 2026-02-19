@@ -27,11 +27,39 @@ import * as UPNG from "upng-js";
 // Constants
 const UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 const UART_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
-const AUTO_CONNECT_DEVICE_ID = "98B09776-ED44-C4D3-1E87-68B04161BDBB";
 const CONNECTED_DEVICE_STORAGE_KEY = "last_connected_device_id";
+const BADGE_NAME_PREFIX = "fausto";
 const MAX_CONNECTION_RETRIES = 3;
+const AUTOCONNECT_DIRECT_TIMEOUT = 4000;
+const AUTOCONNECT_SCAN_TIMEOUT = 10000;
+const MANUAL_SCAN_TIMEOUT = 8000;
+const RETRY_DELAY_MS = 2000;
 const CONNECTION_TIMEOUT = 15000;
-const SCAN_TIMEOUT = 15000;
+
+const getDeviceName = (device: Device) =>
+  (device.name || (device as any).localName || "").trim();
+
+const hasUartService = (device: Device) => {
+  const serviceUUIDs = (device as any).serviceUUIDs as string[] | undefined;
+  if (!Array.isArray(serviceUUIDs)) return false;
+  return serviceUUIDs.some(
+    (uuid) => typeof uuid === "string" && uuid.toLowerCase() === UART_SERVICE_UUID.toLowerCase()
+  );
+};
+
+const matchesBadgeCandidate = (device: Device, targetId: string | null) => {
+  const name = getDeviceName(device).toLowerCase();
+  return (
+    (targetId !== null && device.id === targetId) ||
+    name.includes(BADGE_NAME_PREFIX) ||
+    hasUartService(device)
+  );
+};
+
+const getScanOptions = () =>
+  Platform.OS === "android"
+    ? ({ allowDuplicates: false, scanMode: 2 } as any) // 2 = low-latency mode on Android
+    : ({ allowDuplicates: true } as any);
 
 interface BleContextType {
   // Connection state
@@ -62,12 +90,51 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [isScanning, setIsScanning] = useState(false);
   const [devices, setDevices] = useState<Record<string, Device>>({});
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
+  const [lastKnownDeviceId, setLastKnownDeviceId] = useState<string | null>(null);
   const [uartRxChar, setUartRxChar] = useState<Characteristic | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [autoconnectFailed, setAutoconnectFailed] = useState(false);
   const [connectionRetryCount, setConnectionRetryCount] = useState(0);
   const [rssi, setRssi] = useState<number | null>(null);
   const [isSendingImage, setIsSendingImage] = useState(false);
+  const autoConnectRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scanReasonRef = useRef<"autoconnect" | "manual" | null>(null);
+  const scanCandidateCountRef = useRef(0);
+  const autoconnectRunIdRef = useRef(0);
+  const manualDisconnectRef = useRef(false);
+  const autoConnectRef = useRef<(retryCount?: number) => Promise<void>>(async () => {});
+
+  const clearAutoConnectRetryTimer = useCallback(() => {
+    if (autoConnectRetryTimerRef.current) {
+      clearTimeout(autoConnectRetryTimerRef.current);
+      autoConnectRetryTimerRef.current = null;
+    }
+  }, []);
+
+  const clearScanTimeout = useCallback(() => {
+    if (scanTimeoutRef.current) {
+      clearTimeout(scanTimeoutRef.current);
+      scanTimeoutRef.current = null;
+    }
+  }, []);
+
+  const stopScan = useCallback(
+    (reason: string) => {
+      clearScanTimeout();
+      try {
+        manager.stopDeviceScan();
+      } catch {}
+      if (scanReasonRef.current) {
+        console.log(
+          `[BLE][scan] stop (${scanReasonRef.current}) reason=${reason} candidates=${scanCandidateCountRef.current}`
+        );
+      }
+      scanReasonRef.current = null;
+      setIsScanning(false);
+    },
+    [clearScanTimeout]
+  );
 
   const handleDeviceConnection = useCallback(
     async (device: Device, isRetry: boolean = false) => {
@@ -94,7 +161,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
             } else {
               clearInterval(rssiInterval);
             }
-          } catch (e) {
+          } catch {
             clearInterval(rssiInterval);
           }
         }, 5000);
@@ -117,9 +184,11 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setIsConnecting(false);
         setAutoconnectFailed(false);
         setConnectionRetryCount(0);
+        manualDisconnectRef.current = false;
 
         try {
           await SecureStore.setItemAsync(CONNECTED_DEVICE_STORAGE_KEY, device.id);
+          setLastKnownDeviceId(device.id);
         } catch (e) {
           console.log("Could not save device ID:", e);
         }
@@ -139,12 +208,15 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const autoConnect = useCallback(
     async (retryCount: number = 0) => {
-      if (isConnecting || connectedDevice) return;
+      if (connectedDevice) return;
+      if (scanReasonRef.current === "manual") return;
+      if (isConnecting && retryCount === 0) return;
 
       try {
-        console.log(
-          `Attempting autoconnect to ${AUTO_CONNECT_DEVICE_ID} (attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES + 1})`
-        );
+        const runId = ++autoconnectRunIdRef.current;
+        const isCurrentRun = () => autoconnectRunIdRef.current === runId;
+        const targetId = lastKnownDeviceId;
+
         setAutoconnectFailed(false);
         setIsConnecting(true);
         setConnectionRetryCount(retryCount);
@@ -155,102 +227,146 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           await new Promise((resolve) => setTimeout(resolve, connectionDelay));
         }
 
-        try {
-          const device = await manager.connectToDevice(AUTO_CONNECT_DEVICE_ID, {
-            timeout: CONNECTION_TIMEOUT,
-          });
-          console.log("Direct connection successful:", device.id);
-          await handleDeviceConnection(device, retryCount > 0);
-          return;
-        } catch (directError: any) {
-          console.log("Direct connection failed, will scan:", directError.message);
-          if (directError.errorCode === 201 || directError.errorCode === 202) {
-            // Connection timeout or device not found - proceed to scan
-          } else if (retryCount < MAX_CONNECTION_RETRIES) {
-            console.log(`Retrying connection (${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
-            return autoConnect(retryCount + 1);
-          }
-        }
-
-        let foundDevice: Device | null = null;
-        const scanTimeout = setTimeout(() => {
-          manager.stopDeviceScan();
-          setIsScanning(false);
-          if (!foundDevice) {
-            console.log("Autoconnect: Device not found during scan");
-            if (retryCount < MAX_CONNECTION_RETRIES) {
-              console.log(`Retrying scan (${retryCount + 1}/${MAX_CONNECTION_RETRIES})`);
-              setTimeout(() => autoConnect(retryCount + 1), 2000);
-            } else {
-              setIsConnecting(false);
-              setAutoconnectFailed(true);
-            }
-          }
-        }, SCAN_TIMEOUT);
-
-        setIsScanning(true);
-
-        const scanCallback = (error: BleError | null, device: Device | null) => {
-          if (error) {
-            console.log("Scan error during autoconnect:", error);
-            clearTimeout(scanTimeout);
-            setIsScanning(false);
-            if (retryCount < MAX_CONNECTION_RETRIES) {
-              setTimeout(() => autoConnect(retryCount + 1), 2000);
-            } else {
-              setIsConnecting(false);
-              setAutoconnectFailed(true);
-            }
-            return;
-          }
-
-          if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
-            foundDevice = device;
-            clearTimeout(scanTimeout);
-            manager.stopDeviceScan();
-            setIsScanning(false);
-            handleDeviceConnection(device, retryCount > 0);
+        const scheduleRetry = () => {
+          clearAutoConnectRetryTimer();
+          if (retryCount < MAX_CONNECTION_RETRIES) {
+            const nextRetry = retryCount + 1;
+            autoConnectRetryTimerRef.current = setTimeout(() => {
+              autoConnect(nextRetry);
+            }, RETRY_DELAY_MS);
+            console.log(
+              `[BLE][autoconnect] scheduled retry ${nextRetry + 1}/${MAX_CONNECTION_RETRIES + 1}`
+            );
+          } else {
+            setIsConnecting(false);
+            setAutoconnectFailed(true);
+            console.log("[BLE][autoconnect] exhausted retries");
           }
         };
 
+        clearAutoConnectRetryTimer();
+        stopScan("autoconnect-restart");
+        console.log(
+          `[BLE][autoconnect] attempt ${retryCount + 1}/${MAX_CONNECTION_RETRIES + 1}, target=${
+            targetId || "none"
+          }`
+        );
+
+        if (targetId) {
+          try {
+            console.log(`[BLE][autoconnect] direct connect -> ${targetId}`);
+            const connected = await manager.connectToDevice(targetId, {
+              timeout: AUTOCONNECT_DIRECT_TIMEOUT,
+            });
+            if (!isCurrentRun()) {
+              await manager.cancelDeviceConnection(connected.id).catch(() => {});
+              return;
+            }
+            console.log(`[BLE][autoconnect] direct connect success -> ${connected.id}`);
+            await handleDeviceConnection(connected, retryCount > 0);
+            return;
+          } catch (directError: any) {
+            console.log(
+              `[BLE][autoconnect] direct connect failed -> ${
+                directError?.message || String(directError)
+              }`
+            );
+          }
+        }
+
+        let connectInProgress = false;
+        scanReasonRef.current = "autoconnect";
+        scanCandidateCountRef.current = 0;
+        setIsScanning(true);
+        console.log(`[BLE][scan] start (autoconnect) target=${targetId || "none"}`);
+
         try {
-          manager.startDeviceScan(
-            [UART_SERVICE_UUID],
-            { allowDuplicates: false },
-            (error, device) => {
-              if (error) {
-                console.log("Scan error during autoconnect:", error);
-                manager.stopDeviceScan();
-                manager.startDeviceScan(null, { allowDuplicates: false }, scanCallback);
+          manager.startDeviceScan(null, getScanOptions(), async (error, device) => {
+            if (!isCurrentRun()) return;
+            if (error) {
+              console.log("[BLE][scan] autoconnect error:", error.message);
+              stopScan("autoconnect-scan-error");
+              scheduleRetry();
+              return;
+            }
+
+            if (!device || connectInProgress) return;
+            if (!matchesBadgeCandidate(device, targetId)) return;
+
+            connectInProgress = true;
+            scanCandidateCountRef.current += 1;
+            const source = targetId && device.id === targetId ? "known-id" : "name-match";
+            console.log(
+              `[BLE][scan] candidate #${scanCandidateCountRef.current} (${source}) ${device.id} (${getDeviceName(
+                device
+              ) || "Unnamed"})`
+            );
+
+            stopScan("candidate-found");
+            try {
+              console.log(`[BLE][autoconnect] connect from scan (${source}) -> ${device.id}`);
+              const connected = await manager.connectToDevice(device.id, {
+                timeout: CONNECTION_TIMEOUT,
+              });
+              if (!isCurrentRun()) {
+                await manager.cancelDeviceConnection(connected.id).catch(() => {});
                 return;
               }
-
-              if (device && device.id === AUTO_CONNECT_DEVICE_ID) {
-                foundDevice = device;
-                clearTimeout(scanTimeout);
-                manager.stopDeviceScan();
-                setIsScanning(false);
-                handleDeviceConnection(device, retryCount > 0);
+              await handleDeviceConnection(connected, retryCount > 0);
+            } catch (scanConnectError: any) {
+              console.log(
+                `[BLE][autoconnect] scan-connect failed -> ${
+                  scanConnectError?.message || String(scanConnectError)
+                }`
+              );
+              if (isCurrentRun()) {
+                scheduleRetry();
               }
             }
+          });
+        } catch (scanStartError: any) {
+          console.log(
+            `[BLE][scan] failed to start autoconnect scan -> ${
+              scanStartError?.message || String(scanStartError)
+            }`
           );
-        } catch (scanError) {
-          console.log("Service UUID scan failed, scanning all devices:", scanError);
-          manager.startDeviceScan(null, { allowDuplicates: false }, scanCallback);
+          stopScan("autoconnect-start-failed");
+          scheduleRetry();
+          return;
         }
+
+        clearScanTimeout();
+        scanTimeoutRef.current = setTimeout(() => {
+          if (!isCurrentRun()) return;
+          stopScan("autoconnect-timeout");
+          scheduleRetry();
+        }, AUTOCONNECT_SCAN_TIMEOUT);
       } catch (e: any) {
-        console.log("Autoconnect error:", e);
+        console.log("[BLE][autoconnect] fatal error:", e);
         if (retryCount < MAX_CONNECTION_RETRIES) {
-          setTimeout(() => autoConnect(retryCount + 1), 2000);
+          clearAutoConnectRetryTimer();
+          autoConnectRetryTimerRef.current = setTimeout(() => autoConnect(retryCount + 1), RETRY_DELAY_MS);
         } else {
           setIsConnecting(false);
-          setIsScanning(false);
+          stopScan("autoconnect-fatal");
           setAutoconnectFailed(true);
         }
       }
     },
-    [isConnecting, connectedDevice, handleDeviceConnection]
+    [
+      clearAutoConnectRetryTimer,
+      clearScanTimeout,
+      connectedDevice,
+      handleDeviceConnection,
+      isConnecting,
+      lastKnownDeviceId,
+      stopScan,
+    ]
   );
+
+  useEffect(() => {
+    autoConnectRef.current = autoConnect;
+  }, [autoConnect]);
 
   useEffect(() => {
     (async () => {
@@ -272,49 +388,85 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
           console.log("Permission error:", e);
         }
       }
-
-      const deviceDisconnectedSubscription = manager.onDeviceDisconnected(
-        AUTO_CONNECT_DEVICE_ID,
-        (error, device) => {
-          console.log("Device disconnected:", device?.id, error);
-          setConnectedDevice(null);
-          setUartRxChar(null);
-          setRssi(null);
-          if (device) {
-            setTimeout(() => {
-              autoConnect();
-            }, 2000);
-          }
+      try {
+        const savedDeviceId = await SecureStore.getItemAsync(CONNECTED_DEVICE_STORAGE_KEY);
+        if (savedDeviceId) {
+          setLastKnownDeviceId(savedDeviceId);
+          console.log(`[BLE] Loaded saved device ID: ${savedDeviceId}`);
+        } else {
+          console.log("[BLE] No saved device ID found");
         }
-      );
-
-      return () => {
-        deviceDisconnectedSubscription.remove();
-      };
+      } catch (e) {
+        console.log("Could not load saved device ID:", e);
+      }
     })();
 
     return () => {
+      autoconnectRunIdRef.current += 1;
+      clearAutoConnectRetryTimer();
+      clearScanTimeout();
+      try {
+        manager.stopDeviceScan();
+      } catch {}
       manager.destroy();
     };
-  }, []);
+  }, [clearAutoConnectRetryTimer, clearScanTimeout]);
+
+  useEffect(() => {
+    if (!lastKnownDeviceId) return;
+
+    const deviceDisconnectedSubscription = manager.onDeviceDisconnected(
+      lastKnownDeviceId,
+      (error, device) => {
+        console.log(`[BLE] Device disconnected: ${device?.id || lastKnownDeviceId}`, error);
+        stopScan("device-disconnected");
+        setConnectedDevice(null);
+        setUartRxChar(null);
+        setRssi(null);
+        setIsConnecting(false);
+
+        if (manualDisconnectRef.current) {
+          manualDisconnectRef.current = false;
+          console.log("[BLE] Manual disconnect requested; skipping autoconnect.");
+          return;
+        }
+
+        if (scanReasonRef.current === "manual") return;
+        clearAutoConnectRetryTimer();
+        autoConnectRetryTimerRef.current = setTimeout(() => {
+          autoConnectRef.current(0);
+        }, RETRY_DELAY_MS);
+      }
+    );
+
+    return () => {
+      deviceDisconnectedSubscription.remove();
+    };
+  }, [clearAutoConnectRetryTimer, lastKnownDeviceId, stopScan]);
 
   useEffect(() => {
     const subscription = manager.onStateChange((state) => {
       console.log("BLE State updated:", state);
       if (state === "PoweredOn") {
         setTimeout(() => {
-          autoConnect(0);
+          autoConnectRef.current(0);
         }, 500);
       }
     }, true);
 
     return () => subscription.remove();
-  }, [autoConnect]);
+  }, []);
 
   const startScan = async () => {
-    if (isScanning || isConnecting || connectedDevice) return;
+    if (connectedDevice) return;
+
+    autoconnectRunIdRef.current += 1;
+    clearAutoConnectRetryTimer();
+    stopScan("manual-scan-requested");
 
     setAutoconnectFailed(false);
+    setConnectionRetryCount(0);
+    setIsConnecting(false);
     const state = await manager.state();
 
     if (state === "Unauthorized") {
@@ -344,69 +496,61 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     }
 
     setDevices({});
+    scanReasonRef.current = "manual";
+    scanCandidateCountRef.current = 0;
     setIsScanning(true);
+    console.log("[BLE][scan] start (manual)");
 
-    const startAllDeviceScan = () => {
-      manager.startDeviceScan(null, { allowDuplicates: false }, (error, device) => {
+    try {
+      manager.startDeviceScan(null, getScanOptions(), (error, device) => {
         if (error) {
-          console.log("Scan callback error:", error);
-          setIsScanning(false);
-          manager.stopDeviceScan();
+          console.log("[BLE][scan] manual error:", error.message);
+          stopScan("manual-scan-error");
           return;
         }
 
-        if (device) {
-          setDevices((prev) => {
-            if (prev[device.id] && prev[device.id].name === device.name) return prev;
-            return { ...prev, [device.id]: device };
-          });
-        }
-      });
-    };
+        if (!device) return;
+        if (!matchesBadgeCandidate(device, lastKnownDeviceId)) return;
 
-    try {
-      try {
-        manager.startDeviceScan(
-          [UART_SERVICE_UUID],
-          { allowDuplicates: false },
-          (error, device) => {
-            if (error) {
-              manager.stopDeviceScan();
-              startAllDeviceScan();
-              return;
-            }
-
-            if (device) {
-              setDevices((prev) => {
-                if (prev[device.id] && prev[device.id].name === device.name) return prev;
-                return { ...prev, [device.id]: device };
-              });
-            }
+        setDevices((prev) => {
+          const existing = prev[device.id];
+          if (existing && existing.name === device.name && existing.rssi === device.rssi) {
+            return prev;
           }
-        );
-      } catch (serviceScanError) {
-        startAllDeviceScan();
-      }
+          if (!existing) {
+            scanCandidateCountRef.current += 1;
+            console.log(
+              `[BLE][scan] manual candidate #${scanCandidateCountRef.current} ${device.id} (${getDeviceName(
+                device
+              ) || "Unnamed"})`
+            );
+          }
+          return { ...prev, [device.id]: device };
+        });
+      });
     } catch (err: any) {
       Alert.alert("Start Scan Exception", err.message);
-      setIsScanning(false);
+      stopScan("manual-start-exception");
+      return;
     }
 
-    setTimeout(() => {
-      manager.stopDeviceScan();
-      setIsScanning(false);
-    }, 15000);
+    clearScanTimeout();
+    scanTimeoutRef.current = setTimeout(() => {
+      stopScan("manual-timeout");
+    }, MANUAL_SCAN_TIMEOUT);
   };
 
   const connectToDevice = async (device: Device) => {
     if (isConnecting) return;
 
+    autoconnectRunIdRef.current += 1;
+    clearAutoConnectRetryTimer();
     setIsConnecting(true);
-    setIsScanning(false);
-    manager.stopDeviceScan();
+    stopScan("manual-connect");
     setUartRxChar(null);
 
     try {
+      console.log(`[BLE][connect] manual -> ${device.id}`);
       const connected = await manager.connectToDevice(device.id, {
         timeout: CONNECTION_TIMEOUT,
       });
@@ -435,13 +579,16 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
 
   const disconnect = async () => {
     if (!connectedDevice) return;
+    manualDisconnectRef.current = true;
     try {
       await manager.cancelDeviceConnection(connectedDevice.id);
     } catch (e) {
       console.log("Disconnect error:", e);
     }
+    setIsConnecting(false);
     setConnectedDevice(null);
     setUartRxChar(null);
+    setRssi(null);
   };
 
   const sendImageToBadge = async (imageUrl: string, prophecyText: string) => {

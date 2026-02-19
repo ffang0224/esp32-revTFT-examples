@@ -433,52 +433,55 @@ image_state = {
 
 
 # ---------- BLE ----------
+BLE_DEVICE_NAME = "FaustoBD"
+BLE_ADV_INTERVAL = 0.1
+
+
+def ble_log(message):
+    print(f"[BLE {time.monotonic():.3f}] {message}")
+
+
 ble = BLERadio()
 # Sometimes BLE holds onto an old name or connection.
 # Force name setting:
 try:
-    ble.name = "FaustoBadge"
-    print(f"Set BLE name to: {ble.name}")
+    ble.name = BLE_DEVICE_NAME
+    ble_log(f"Set BLE name to: {ble.name}")
 except Exception as e:
-    print(f"Warning: Could not set BLE name: {e}")
+    ble_log(f"Warning: Could not set BLE name: {e}")
 
 uart = UARTService()
 advertisement = ProvideServicesAdvertisement(uart)
-# Ensure 'complete_name' is actually broadcast in the scan response or main packet if space allows
-advertisement.complete_name = "FaustoBadge"
-advertisement.short_name = "Fausto"
+# Use only a complete_name to keep the advertising payload simple and compatible.
+# If you run into size issues, prefer a shorter complete_name rather than also
+# setting short_name, which can increase packet size and cause truncation.
+advertisement.complete_name = BLE_DEVICE_NAME
+# If you really need a short name, you can enable this, but try leaving it
+# disabled first for best compatibility:
+# advertisement.short_name = "Fausto"
 
-# Track advertising state to avoid unnecessary operations
-is_advertising = False
-
-print("BLE initialized, ready to advertise as FaustoBadge")
+ble_log(f"BLE initialized, ready to advertise as {BLE_DEVICE_NAME}")
 
 while True:
-    print("WAITING...")
+    ble_log("WAITING for connection")
     set_text("Waiting for BLE...", 0x00FFFF)
-    
-    # Always ensure clean state: stop advertising if it's running
-    # This prevents issues with stale advertising state
-    if is_advertising:
-        try:
-            ble.stop_advertising()
-            print("Stopped previous advertising")
-        except Exception as e:
-            print(f"Note: Error stopping advertising (may not have been active): {e}")
-        is_advertising = False
-        time.sleep(0.2)  # Brief pause to ensure clean state
-    
+
+    # Always try to stop any prior advertising; ignore errors if it wasn't active.
+    try:
+        ble.stop_advertising()
+        ble_log("Ensured advertising is stopped before starting")
+    except Exception as e:
+        ble_log(f"Note: stop_advertising (pre-start) ignored: {e}")
+
     # Start advertising with error handling
     try:
-        ble.start_advertising(advertisement)
-        is_advertising = True
-        print("Started advertising - waiting for connection...")
+        ble.start_advertising(advertisement, interval=BLE_ADV_INTERVAL)
+        ble_log(f"Started advertising name={BLE_DEVICE_NAME}, interval={BLE_ADV_INTERVAL}s")
         # Give advertising a moment to start broadcasting
         time.sleep(0.1)
     except Exception as e:
-        print(f"Failed to start advertising: {e}")
+        ble_log(f"Failed to start advertising: {e}")
         set_text("Adv error!", 0xFF0000)
-        is_advertising = False
         time.sleep(2)  # Wait longer before retrying on error
         continue
 
@@ -487,24 +490,26 @@ while True:
     start_wait = time.monotonic()
     while not ble.connected:
         if time.monotonic() - start_wait > connection_timeout:
-            print("Connection timeout - restarting advertising")
+            ble_log("Connection timeout - restarting advertising")
             break  # Break out to restart advertising
         time.sleep(0.1)
-    
-    # If we broke due to timeout, restart the loop
-    if not ble.connected:
-        continue
 
-    # Stop advertising when connected
-    if is_advertising:
+    # If we broke due to timeout, restart the loop and re-advertise
+    if not ble.connected:
         try:
             ble.stop_advertising()
-            is_advertising = False
-            print("Stopped advertising (connected)")
         except Exception as e:
-            print(f"Error stopping advertising: {e}")
-    
-    print("CONNECTED")
+            ble_log(f"stop_advertising after timeout ignored: {e}")
+        continue
+
+    # Connected: stop advertising if still active
+    try:
+        ble.stop_advertising()
+        ble_log("Stopped advertising (connected)")
+    except Exception as e:
+        ble_log(f"Error stopping advertising after connect: {e}")
+
+    ble_log("CONNECTED")
     set_text("Connected ✅", 0x00FF00)
 
     while ble.connected:
@@ -666,22 +671,20 @@ while True:
 
         time.sleep(0.05)
 
-    print("DISCONNECTED")
+    ble_log("DISCONNECTED")
     # Reset image state on disconnect
     image_state["receiving"] = False
     image_state["data"] = bytearray()
     image_state["prompt"] = ""
     image_state["last_chunk_time"] = 0
-    
-    # Ensure advertising is stopped before restarting
-    if is_advertising:
-        try:
-            ble.stop_advertising()
-            is_advertising = False
-            print("Stopped advertising (disconnected)")
-        except Exception as e:
-            print(f"Error stopping advertising on disconnect: {e}")
-    
+
+    # Always try to stop advertising to ensure a clean state
+    try:
+        ble.stop_advertising()
+        ble_log("Stopped advertising (disconnected)")
+    except Exception as e:
+        ble_log(f"Error stopping advertising on disconnect: {e}")
+
     # Small delay after disconnect before restarting advertising to ensure clean state
     time.sleep(0.5)
     # loop repeats, advertising will restart at the top

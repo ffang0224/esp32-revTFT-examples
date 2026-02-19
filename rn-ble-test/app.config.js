@@ -13,7 +13,7 @@ export default {
         NSBluetoothAlwaysUsageDescription:
           "This app uses Bluetooth to connect to your FaustoBadge.",
       },
-      bundleIdentifier: "com.anonymous.rnbletest",
+      bundleIdentifier: "com.faustofang.rnbletest",
     },
     android: {
       permissions: [
