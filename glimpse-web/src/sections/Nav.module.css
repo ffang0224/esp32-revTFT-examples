@@ -9,6 +9,7 @@
   justify-content: space-between;
   align-items: center;
   pointer-events: auto;
+  transition: opacity 0.3s;
 }
 
 .logo {
@@ -46,5 +47,4 @@
 .hidden {
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.3s;
 }

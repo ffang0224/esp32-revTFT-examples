@@ -1,6 +1,6 @@
 import styles from './Nav.module.css'
 
-export default function Nav({ lenisRef, hidden }) {
+export default function Nav({ lenisRef, hidden = false }) {
   const handleClick = (e, target) => {
     e.preventDefault()
     const lenis = lenisRef?.current
