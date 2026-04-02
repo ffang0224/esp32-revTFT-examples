@@ -86,7 +86,6 @@
   margin-top: 2rem;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
   padding: 0.7rem 1.6rem;
   border: 1px solid var(--accent);
   border-radius: 999px;
@@ -104,5 +103,5 @@
 
 .tryItBtn:hover {
   background: var(--accent);
-  color: #000;
+  color: var(--bg);
 }
