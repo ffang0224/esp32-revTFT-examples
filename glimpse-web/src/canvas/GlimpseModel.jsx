@@ -111,8 +111,9 @@ export default function GlimpseModel() {
     groupRef.current.rotation.y = mroty.current + scrollState.dragOffset
 
     if (screenMeshRef.current && currentTexRef.current !== scrollState.screenIndex) {
-      currentTexRef.current = scrollState.screenIndex
-      screenMeshRef.current.material.map = textures[scrollState.screenIndex]
+      const safeIdx = Math.max(0, Math.min(scrollState.screenIndex, textures.length - 1))
+      currentTexRef.current = safeIdx
+      screenMeshRef.current.material.map = textures[safeIdx]
       screenMeshRef.current.material.needsUpdate = true
     }
 
