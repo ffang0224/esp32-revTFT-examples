@@ -25,6 +25,7 @@ export default function App() {
   const lenisRef   = useRef(null)
   const mainRef    = useRef(null)
   const overlayRef = useRef(null)
+  const tlRef      = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
 
   useEffect(() => {
@@ -36,23 +37,31 @@ export default function App() {
     lenisRef.current = lenis
 
     lenis.on('scroll', ScrollTrigger.update)
-    gsap.ticker.add(time => lenis.raf(time * 1000))
+
+    const rafCallback = time => lenis.raf(time * 1000)
+    gsap.ticker.add(rafCallback)
     gsap.ticker.lagSmoothing(0)
 
-    return () => { lenis.destroy() }
+    return () => {
+      gsap.ticker.remove(rafCallback)
+      lenis.destroy()
+    }
   }, [])
 
   const openDemo = () => {
+    tlRef.current?.kill()
     setNavHidden(true)
-    gsap.timeline()
+    tlRef.current = gsap.timeline()
       .to(mainRef.current,    { opacity: 0, scale: 0.97, duration: 0.4, ease: 'power2.in' })
       .to(overlayRef.current, { opacity: 1, duration: 0.4, ease: 'power2.out' }, '-=0.1')
       .call(() => { overlayRef.current.style.pointerEvents = 'all' })
   }
 
   const closeDemo = () => {
+    if (!overlayRef.current) return
+    tlRef.current?.kill()
     overlayRef.current.style.pointerEvents = 'none'
-    gsap.timeline()
+    tlRef.current = gsap.timeline()
       .to(overlayRef.current, { opacity: 0, duration: 0.3, ease: 'power2.in' })
       .to(mainRef.current,    { opacity: 1, scale: 1, duration: 0.4, ease: 'power2.out' }, '-=0.1')
       .call(() => setNavHidden(false))
@@ -63,6 +72,7 @@ export default function App() {
       <Cursor />
       <Nav lenisRef={lenisRef} hidden={navHidden} />
 
+      {/* Fixed 3D canvas — receives drag events in areas not covered by main content */}
       <div className={styles.canvasWrap}>
         <Canvas
           frameloop="demand"
@@ -86,6 +96,7 @@ export default function App() {
         </Canvas>
       </div>
 
+      {/* pointer-events:none on main lets canvas receive drag events in empty areas */}
       <main ref={mainRef} className={styles.main}>
         <Hero onTryIt={openDemo} />
         <ScrollStory />
