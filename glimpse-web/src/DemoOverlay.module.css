@@ -1,0 +1,172 @@
+.overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.close {
+  position: absolute;
+  top: 2rem;
+  right: 2.5rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 2.4rem;
+  height: 2.4rem;
+  color: var(--text-dim);
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: none;
+  transition: border-color 0.2s, color 0.2s;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.close:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+
+.left {
+  width: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+  pointer-events: auto;
+}
+
+.right {
+  width: 50%;
+  pointer-events: none;
+}
+
+/* Phone frame */
+.phone {
+  width: 280px;
+  min-height: 520px;
+  background: #111;
+  border-radius: 40px;
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 0 1rem;
+  box-shadow: 0 0 60px rgba(41, 151, 255, 0.08);
+  position: relative;
+}
+
+.notch {
+  width: 90px;
+  height: 26px;
+  background: #000;
+  border-radius: 0 0 18px 18px;
+  margin-bottom: 1.4rem;
+}
+
+.phoneScreen {
+  flex: 1;
+  width: 100%;
+  padding: 0 1.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.modeLabel {
+  font-size: 0.65rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+}
+
+.input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  color: var(--text);
+  font-family: 'Lora', Georgia, serif;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+  cursor: none;
+}
+
+.input:focus {
+  border-color: var(--accent-soft);
+}
+
+.input:disabled {
+  opacity: 0.5;
+}
+
+.sendBtn {
+  padding: 0.65rem 1.2rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: transparent;
+  color: var(--accent);
+  font-family: 'Lora', Georgia, serif;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  cursor: none;
+  transition: background 0.25s, color 0.25s, border-color 0.25s;
+  pointer-events: auto;
+}
+
+.sendBtn:not(:disabled):hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.sendBtn:disabled {
+  opacity: 0.4;
+}
+
+.sendBtn.sending {
+  border-color: var(--accent-soft);
+  color: var(--accent-soft);
+}
+
+.sendBtn.received {
+  border-color: #30d158;
+  color: #30d158;
+}
+
+.progressBar {
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  animation: progressFill 1.2s ease-out forwards;
+}
+
+@keyframes progressFill {
+  from { width: 0%; opacity: 1; }
+  to   { width: 100%; opacity: 0.6; }
+}
+
+.homeBar {
+  width: 100px;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 1rem;
+}
+
+.hint {
+  font-size: 0.62rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
