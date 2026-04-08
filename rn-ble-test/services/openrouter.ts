@@ -1,4 +1,6 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+const OPENROUTER_TITLE = "Fausto BLE Badge";
+const OPENROUTER_REFERER = "https://github.com/faustofang/esp32-revTFT-examples";
 
 export interface OpenRouterMessage {
   role: "user" | "assistant" | "system";
@@ -39,6 +41,107 @@ export interface OpenRouterResponse {
   };
 }
 
+interface OpenRouterErrorBody {
+  error?: {
+    message?: string;
+    code?: number | string;
+    type?: string;
+  };
+  message?: string;
+  [key: string]: any;
+}
+
+function shouldFallbackModel(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
+  return (
+    msg.includes(" 403 ") ||
+    msg.includes(" 404 ") ||
+    msg.includes("model not found") ||
+    msg.includes("not enabled") ||
+    msg.includes("unsupported model")
+  );
+}
+
+function normalizeApiKey(apiKey: string): string {
+  return (apiKey || "").trim().replace(/^["']|["']$/g, "");
+}
+
+async function buildOpenRouterError(response: Response): Promise<Error> {
+  const status = response.status;
+  const statusText = response.statusText || "Unknown";
+  const requestId =
+    response.headers.get("x-request-id") ||
+    response.headers.get("x-openrouter-request-id") ||
+    "";
+
+  let parsedBody: OpenRouterErrorBody | null = null;
+  let rawText = "";
+
+  try {
+    parsedBody = (await response.clone().json()) as OpenRouterErrorBody;
+  } catch {
+    try {
+      rawText = await response.text();
+    } catch {
+      rawText = "";
+    }
+  }
+
+  const apiMessage =
+    parsedBody?.error?.message ||
+    parsedBody?.message ||
+    rawText ||
+    "No additional error body";
+
+  let hint = "";
+  if (status === 401) {
+    hint = "Check your OpenRouter API key in Settings (invalid, expired, or malformed key).";
+  } else if (status === 402) {
+    hint = "Your OpenRouter account likely has no credits or billing is required.";
+  } else if (status === 403) {
+    hint = "The requested model may not be enabled for your account.";
+  } else if (status === 404) {
+    hint = "Model not found or endpoint mismatch. Try a different model.";
+  } else if (status === 429) {
+    hint = "Rate limited. Wait a bit and retry.";
+  } else if (status >= 500) {
+    hint = "OpenRouter server-side issue. Retry shortly.";
+  }
+
+  const requestIdText = requestId ? ` (request_id=${requestId})` : "";
+  const hintText = hint ? ` Hint: ${hint}` : "";
+  return new Error(
+    `OpenRouter API error: ${status} ${statusText}${requestIdText} - ${apiMessage}${hintText}`
+  );
+}
+
+async function postOpenRouter(
+  apiKey: string,
+  body: OpenRouterRequest & { stream?: boolean }
+): Promise<OpenRouterResponse> {
+  const normalizedApiKey = normalizeApiKey(apiKey);
+  if (!normalizedApiKey) {
+    throw new Error("OpenRouter API key is empty. Add it in Settings.");
+  }
+
+  const response = await fetch(OPENROUTER_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${normalizedApiKey}`,
+      "HTTP-Referer": OPENROUTER_REFERER,
+      "X-Title": OPENROUTER_TITLE,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw await buildOpenRouterError(response);
+  }
+
+  return (await response.json()) as OpenRouterResponse;
+}
+
 export async function generateText(
   apiKey: string,
   prompt: string,
@@ -53,30 +156,13 @@ export async function generateText(
   
   messages.push({ role: "user", content: prompt });
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://github.com/faustofang/esp32-revTFT-examples",
-      "X-Title": "Fausto BLE Badge",
-    },
-    body: JSON.stringify({
+  const body = {
       model,
       messages,
       max_tokens: 200,
       temperature: 0.7,
-    } as OpenRouterRequest),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `OpenRouter API error: ${response.status} ${response.statusText} - ${errorText}`
-    );
-  }
-
-  const data: OpenRouterResponse = await response.json();
+    } as OpenRouterRequest;
+  const data = await postOpenRouter(apiKey, body);
 
   if (!data.choices || data.choices.length === 0) {
     throw new Error("No response from OpenRouter API");
@@ -115,25 +201,7 @@ export async function generateImage(
   console.log("Full request body:", JSON.stringify(body, null, 2));
   console.log("=== End Request ===");
 
-  const response = await fetch(OPENROUTER_API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-      "HTTP-Referer": "https://github.com/faustofang/esp32-revTFT-examples",
-      "X-Title": "Fausto BLE Badge",
-    },
-    body: JSON.stringify(body),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(
-      `OpenRouter API error: ${response.status} ${response.statusText} - ${errorText}`
-    );
-  }
-
-  const data: OpenRouterResponse = await response.json();
+  const data = await postOpenRouter(apiKey, body);
 
   // Log the full response for debugging
   console.log("=== OpenRouter Full Response ===");
@@ -246,14 +314,48 @@ export const POPULAR_MODELS = [
 
 export const POPULAR_IMAGE_MODELS = [
   { id: "google/gemini-2.0-flash-exp:free", name: "Gemini 2.0 Flash (Free)" },
-  { id: "google/gemini-2.5-flash-image-preview", name: "Gemini 2.5 Flash Image" },
+  { id: "google/gemini-2.5-flash-image", name: "Gemini 2.5 Flash Image" },
   { id: "openai/dall-e-3", name: "DALL-E 3" },
   { id: "openai/dall-e-2", name: "DALL-E 2" },
   // Note: Models with image generation support may vary
 ];
 
-const HALFTONE_PROMPT_PREFIX =
-  "A coarse halftone black-and-white illustration made for a 250×122 e-ink display. Pure 1-bit monochrome, no grayscale. Realistic style, very large halftone dots arranged on a visible grid. High contrast silhouettes with simplified shapes, strong blacks, and blown-out whites. Sharp edges, no anti-aliasing, no smooth gradients. Bitmap texture, heavy dithering, blocky pixel clusters. Composition must remain good quality at extremely low resolution.";
+const INK_BLOT_PROMPT_PREFIX =
+  "Create a mirrored Rorschach-style ink blot for a 250x122 e-ink display. Pure 1-bit black and white only, no grayscale. Single central blot mass with bilateral vertical symmetry, organic edges, subtle grain/noise texture, strong contrast, white paper background. Abstract emotional shape only; no people, no objects, no symbols, no letters, no numbers, no icons, no frames, no borders. Keep the blot centered with clean negative space around it. Crisp bitmap look suitable for dithering and very low-resolution rendering.";
+
+// Local suggestion templates for fast, cost-effective suggestions
+const DILEMMA_TEMPLATES = [
+  "Should I take the promotion that requires relocating?",
+  "Is it time to end this relationship?",
+  "Should I buy a house or keep renting?",
+  "Do I quit my stable job to start my own business?",
+  "Should I confront my friend about what they said?",
+  "Is it worth going into debt for this degree?",
+  "Should I tell my family the truth about...",
+  "Do I prioritize my career or my relationship?",
+];
+
+const VALUE_TEMPLATES = [
+  "Financial security",
+  "Personal growth",
+  "Family time",
+  "Career advancement",
+  "Health and wellness",
+  "Creative expression",
+  "Social connection",
+  "Independence",
+  "Stability",
+  "Adventure",
+  "Recognition",
+  "Autonomy",
+  "Learning",
+  "Compassion",
+  "Honesty",
+  "Loyalty",
+];
+
+// Cache for API suggestions to avoid repeated calls
+const suggestionCache = new Map<string, string[]>();
 
 /**
  * Generate a prophecy based on a dilemma and two selected values
@@ -285,7 +387,7 @@ PROPHECY RULES:
 - Reveal either HARMONY or CONFLICT between the values
 - Offer REFLECTION, not advice
 
-IMAGE SUBJECT (10-30 words): A concrete visual scene that captures the prophecy's emotional core. NOT abstract symbols. Think: "a person standing at a crossroads at dusk", "hands releasing a bird into fog", "an empty chair facing two doors". Evocative but drawable.
+IMAGE SUBJECT (6-20 words): Abstract emotional descriptors for an ink blot aesthetic. Do NOT describe literal scenes or objects. Focus on mood/tension words like "fractured calm, heavy pressure, anxious symmetry, brittle hope".
 
 Respond ONLY in this JSON format:
 {
@@ -297,23 +399,29 @@ Respond ONLY in this JSON format:
 Value 1: ${value1}
 Value 2: ${value2}`;
 
-  const response = await generateText(
-    apiKey,
-    userPrompt,
-    "openai/gpt-4o-mini",
-    systemPrompt
-  );
+  let response: string;
+  try {
+    response = await generateText(apiKey, userPrompt, "openai/gpt-4o-mini", systemPrompt);
+  } catch (error) {
+    if (!shouldFallbackModel(error)) {
+      throw error;
+    }
+    console.warn(
+      "[OpenRouter] Primary text model unavailable, retrying with openrouter/auto."
+    );
+    response = await generateText(apiKey, userPrompt, "openrouter/auto", systemPrompt);
+  }
 
   try {
     const parsed = JSON.parse(response);
     return {
       prophecyText: parsed.prophecy || parsed.prophecyText || response,
-      imagePrompt: parsed.imagePrompt || parsed.image_prompt || "crystal ball",
+      imagePrompt: parsed.imagePrompt || parsed.image_prompt || "uneasy balance, restrained tension, fragile calm",
     };
   } catch {
     return {
       prophecyText: response.slice(0, 80),
-      imagePrompt: "an empty chair facing two doors",
+      imagePrompt: "uneasy balance, restrained tension, fragile calm",
     };
   }
 }
@@ -325,6 +433,106 @@ export async function generateProphecyImage(
   apiKey: string,
   imagePrompt: string
 ): Promise<string> {
-  const fullPrompt = HALFTONE_PROMPT_PREFIX + imagePrompt;
-  return generateImage(apiKey, fullPrompt, "google/gemini-2.5-flash-image-preview", "1:1");
+  const fullPrompt = `${INK_BLOT_PROMPT_PREFIX} Mood cues: ${imagePrompt}.`;
+  return generateImage(apiKey, fullPrompt, "google/gemini-2.5-flash-image", "1:1");
+}
+
+/**
+ * Generate quick suggestions for dilemma input
+ * Uses local templates first, falls back to lightweight API call
+ */
+export async function generateDilemmaSuggestions(
+  apiKey: string,
+  count: number = 3
+): Promise<string[]> {
+  // Always include some templates for instant display
+  const shuffled = [...DILEMMA_TEMPLATES].sort(() => Math.random() - 0.5);
+  const templates = shuffled.slice(0, count);
+
+  // If no API key, just return templates
+  if (!apiKey) {
+    return templates;
+  }
+
+  // Check cache
+  const cacheKey = `dilemma_${count}`;
+  const cached = suggestionCache.get(cacheKey);
+  if (cached && Date.now() - (suggestionCache.get(`${cacheKey}_time`) as number || 0) < 300000) {
+    return cached;
+  }
+
+  try {
+    // Lightweight API call for fresh suggestions
+    const systemPrompt = `You are a helpful assistant generating brief dilemma starters. Generate ${count} short, relatable dilemma questions (under 60 chars each). Return as JSON array: {"suggestions":["...", "...", "..."]}`;
+
+    const response = await generateText(apiKey, "Generate dilemma examples", "openai/gpt-4o-mini", systemPrompt);
+
+    try {
+      const parsed = JSON.parse(response);
+      const suggestions = parsed.suggestions || parsed.dilemmas || [];
+      if (suggestions.length > 0) {
+        // Cache results
+        suggestionCache.set(cacheKey, suggestions);
+        suggestionCache.set(`${cacheKey}_time`, Date.now());
+        return suggestions.slice(0, count);
+      }
+    } catch {
+      // JSON parse failed, return templates
+    }
+  } catch (e) {
+    // API call failed, return templates silently
+    console.log("Suggestion API failed, using templates:", e);
+  }
+
+  return templates;
+}
+
+/**
+ * Generate quick suggestions for value input
+ */
+export async function generateValueSuggestions(
+  apiKey: string,
+  dilemma?: string,
+  count: number = 4
+): Promise<string[]> {
+  // Always include templates
+  const shuffled = [...VALUE_TEMPLATES].sort(() => Math.random() - 0.5);
+  const templates = shuffled.slice(0, count);
+
+  // If no API key or no dilemma context, just return templates
+  if (!apiKey || !dilemma) {
+    return templates;
+  }
+
+  // Check cache
+  const cacheKey = `value_${dilemma.slice(0, 30)}_${count}`;
+  const cached = suggestionCache.get(cacheKey);
+  if (cached && Date.now() - (suggestionCache.get(`${cacheKey}_time`) as number || 0) < 300000) {
+    return cached;
+  }
+
+  try {
+    // Contextual suggestions based on dilemma
+    const systemPrompt = `Given a dilemma, suggest ${count} core values that might be relevant. Return as JSON: {"suggestions":["value1", "value2", ...]}. Keep each under 20 chars.`;
+    const userPrompt = `Dilemma: ${dilemma.slice(0, 100)}`;
+
+    const response = await generateText(apiKey, userPrompt, "openai/gpt-4o-mini", systemPrompt);
+
+    try {
+      const parsed = JSON.parse(response);
+      const suggestions = parsed.suggestions || parsed.values || [];
+      if (suggestions.length > 0) {
+        const result = suggestions.slice(0, count);
+        suggestionCache.set(cacheKey, result);
+        suggestionCache.set(`${cacheKey}_time`, Date.now());
+        return result;
+      }
+    } catch {
+      // JSON parse failed
+    }
+  } catch (e) {
+    console.log("Value suggestion API failed, using templates:", e);
+  }
+
+  return templates;
 }

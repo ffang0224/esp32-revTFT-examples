@@ -19,8 +19,6 @@
   letter-spacing: 0.1em;
   color: var(--text);
   text-decoration: none;
-  opacity: 0;
-  animation: fadeDown 0.8s 0.2s forwards;
 }
 
 .links {
@@ -36,12 +34,29 @@
   color: var(--text-dim);
   text-decoration: none;
   transition: color 0.3s;
-  opacity: 0;
-  animation: fadeDown 0.8s 0.4s forwards;
 }
 
 .links a:hover {
   color: var(--text);
+}
+
+.tryItButton {
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--accent);
+  font-family: 'Lora', Georgia, serif;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
+
+.tryItButton:hover {
+  background: var(--accent);
+  color: var(--bg);
 }
 
 .hidden {

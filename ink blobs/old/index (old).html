@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Glimpse Oracle</title>
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Lora:ital@0;1&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Lora', Georgia, serif;
+      background: #0e0d0b;
+      min-height: 100vh;
+      margin: 0;
+      padding: 2rem;
+      color: #c4a882;
+      box-sizing: border-box;
+    }
+    .container { max-width: 900px; margin: 0 auto; }
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 2rem; font-weight: 700;
+      color: #f5f0e8; margin-bottom: 0.3rem; letter-spacing: 0.05em; margin-top: 0;
+    }
+    .subtitle {
+      font-size: 0.8rem; letter-spacing: 0.15em; text-transform: uppercase; 
+      color: #5a4e3a; margin-top: 0; margin-bottom: 2rem;
+    }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2.5rem; }
+    .section-title {
+      font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; 
+      color: #5a4e3a; margin-top: 0; margin-bottom: 1rem;
+    }
+    
+    .btn-group { display: flex; gap: 0.5rem; margin-bottom: 1rem; }
+    .engine-btn {
+      flex: 1; padding: 0.6rem 0.2rem; background: transparent; 
+      border: 1px solid #3a3020; color: #5a4e3a; font-size: 0.65rem; 
+      letter-spacing: 0.05em; text-transform: uppercase; 
+      cursor: pointer; border-radius: 4px; transition: all 0.2s;
+    }
+    .engine-btn:hover { background: #1a1612; }
+    .engine-btn.active { background: #8b7355; color: #0e0d0b; border-color: #8b7355; font-weight: bold; }
+
+    .action-btn {
+      width: 100%; padding: 0.7rem; background: transparent; 
+      border: 0.5px solid #3a3020; color: #8b7355; font-size: 0.75rem; 
+      letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; border-radius: 6px;
+      margin-bottom: 0.5rem; transition: background 0.2s;
+    }
+    .action-btn:hover { background: #1a1612; }
+    .action-btn.primary { border-color: #8b7355; background: #1a1612; }
+    
+    .half-btn { flex: 1; margin-bottom: 0; font-size: 0.65rem; }
+
+    #sliders-wrapper, #manual-sliders-wrapper, #engine-options-wrapper {
+      transition: max-height 0.4s ease-out, opacity 0.3s;
+      overflow: hidden;
+      max-height: 900px;
+    }
+    .collapsed {
+      max-height: 0 !important;
+      opacity: 0;
+      pointer-events: none;
+      margin-bottom: 0 !important;
+      margin-top: 0 !important;
+    }
+    
+    #dilemma-section { transition: opacity 0.3s; }
+
+    .slider-container { margin-bottom: 1.1rem; }
+    .slider-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px; }
+    .slider-label { font-size: 0.78rem; color: #8b7355; }
+    .slider-value { font-size: 0.72rem; letter-spacing: 0.08em; }
+    input[type=range] { width: 100%; accent-color: #8b7355; cursor: pointer; }
+    .binary-track { display: flex; gap: 3px; margin-top: 4px; }
+    .binary-segment { flex: 1; height: 2px; border-radius: 1px; }
+
+    .custom-text, #font-url-input {
+      width: 100%; background: #1a1612; border: 1px solid #3a3020; color: #c4a882;
+      font-family: 'Lora', serif; font-size: 0.8rem; padding: 0.8rem; box-sizing: border-box;
+      border-radius: 6px; resize: vertical; margin-bottom: 1rem;
+    }
+    .custom-text { min-height: 80px; }
+    .custom-text::placeholder, #font-url-input::placeholder { color: #5a4e3a; font-style: italic; }
+
+    .toggle-label {
+      display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; 
+      cursor: pointer; font-size: 0.78rem; color: #8b7355;
+    }
+    .toggle-label input[type="checkbox"] { accent-color: #8b7355; width: 16px; height: 16px; cursor: pointer; }
+
+    .hexagram-container {
+      padding: 1rem; border: 0.5px solid #2a2318; 
+      border-radius: 8px; display: flex; align-items: center; gap: 1.2rem;
+    }
+    .hexagram-lines { display: flex; flex-direction: column; gap: 5px; }
+    .hex-line-wrap { display: flex; align-items: center; gap: 4px; height: 2.5px; }
+    .hex-line-solid { width: 24px; height: 100%; background: #8b7355; border-radius: 1px; }
+    .hex-line-broken-part { width: 10px; height: 100%; background: #5a4e3a; border-radius: 1px; }
+
+    .archetype-label { font-size: 0.72rem; color: #5a4e3a; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; }
+    .archetype-name { font-size: 0.9rem; color: #c4a882; font-style: italic; }
+
+    .canvas-wrapper {
+      background: #1a1612; padding: 1.5rem; border-radius: 10px; 
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+    }
+    .canvas-container {
+      width: 500px; background: #ffffff; border: 1px solid #4a4035;
+      border-radius: 2px; overflow: hidden; position: relative;
+    }
+    
+    @keyframes eink-refresh {
+      0% { filter: invert(0); opacity: 1; }
+      20% { filter: invert(1); opacity: 0.8; }
+      40% { filter: invert(0); opacity: 0.3; }
+      60% { filter: invert(1); opacity: 0.9; }
+      80% { filter: invert(0); opacity: 0.2; }
+      100% { filter: invert(0); opacity: 1; }
+    }
+    .refreshing { animation: eink-refresh 0.6s cubic-bezier(.4, 0, .2, 1); }
+
+    canvas { width: 100%; height: auto; display: block; image-rendering: pixelated; }
+    
+    .prophecy-box {
+      width: 500px; padding: 0.8rem 1rem; box-sizing: border-box; background: #f2efe9; 
+      border: 1px solid #4a4035; border-radius: 2px; text-align: center; transition: all 0.3s;
+    }
+    .prophecy-text {
+      font-family: 'Lora', serif; font-size: 0.78rem; color: #1a1612; 
+      font-style: italic; line-height: 1.6; margin: 0; white-space: pre-wrap;
+    }
+
+    details { margin-top: 0.5rem; }
+    summary { font-size: 0.68rem; color: #3a3020; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+    .knob-readout {
+      margin-top: 0.5rem; padding: 0.75rem; border: 0.5px solid #2a2318; border-radius: 6px;
+      font-family: monospace; font-size: 0.68rem; color: #5a4e3a; line-height: 2;
+    }
+    .knob-readout span { color: #8b7355; }
+    .history-log { font-family: monospace; font-size: 0.65rem; color: #5a4e3a; margin-top: 0.5rem; }
+    .seed-link { cursor: pointer; color: #8b7355; text-decoration: underline; margin: 0 4px; transition: color 0.2s; }
+    .seed-link:hover { color: #c4a882; }
+
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    input[type=number] { -moz-appearance: textfield; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div style="margin-bottom: 2rem;">
+      <h1>Glimpse</h1>
+      <p class="subtitle">Prophecy generation system visual oracle</p>
+    </div>
+
+    <div class="grid">
+      <div>
+        <p class="section-title">Rendering Engine</p>
+        <div class="btn-group">
+          <button type="button" id="btn-super" class="engine-btn active">Supersampled</button>
+          <button type="button" id="btn-std" class="engine-btn">Standard</button>
+          <button type="button" id="btn-p5" class="engine-btn">p5.js (Hi-Res)</button>
+        </div>
+        
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 1rem;">
+          <p class="section-title" style="margin-bottom: 0;">Engine Options</p>
+          <button type="button" id="btn-toggle-engine-opts" style="background: none; border: none; color: #8b7355; font-size: 0.65rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;">[ Hide ]</button>
+        </div>
+
+        <div id="engine-options-wrapper" style="margin-bottom: 1.5rem; margin-top: 0.5rem;">
+          <label class="toggle-label">
+            <input type="checkbox" id="check-invert">
+            Invert Canvas Colors
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="check-draw-text">
+            Draw Prophecy inside Image
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="check-squeeze-blob">
+            Shift & Squeeze Form (Alt Layout)
+          </label>
+          <label class="toggle-label">
+            <input type="checkbox" id="check-refresh-effect" checked>
+            E-Ink Flash Effect
+          </label>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 1rem; border-top: 1px solid #2a2318; padding-top: 1rem;">
+          <p class="section-title" style="margin-bottom: 0; color: #c4a882; font-weight: bold;">Manual Engine Override</p>
+          <button type="button" id="btn-toggle-manual-sliders" style="background: none; border: none; color: #8b7355; font-size: 0.65rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;">[ Show ]</button>
+        </div>
+
+        <div id="manual-sliders-wrapper" class="collapsed" style="margin-bottom: 2rem; margin-top: 0.5rem;">
+            <div id="manual-sliders-container"></div>
+        </div>
+
+        <div id="dilemma-section">
+            <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                <p class="section-title">Dilemma parameters</p>
+                <button type="button" id="btn-toggle-sliders" style="background: none; border: none; color: #8b7355; font-size: 0.65rem; cursor: pointer; text-transform: uppercase; letter-spacing: 0.05em;">[ Hide ]</button>
+            </div>
+
+            <div id="sliders-wrapper">
+                <div id="sliders-container"></div>
+            </div>
+
+            <p class="section-title" style="margin-top: 1rem;">Form Presets (Fast Shift)</p>
+            <div class="btn-group">
+                <button type="button" class="engine-btn preset-btn" id="btn-set-ethereal">Ethereal</button>
+                <button type="button" class="engine-btn preset-btn" id="btn-set-monolith">Monolith</button>
+                <button type="button" class="engine-btn preset-btn" id="btn-set-aggressive">Aggressive</button>
+            </div>
+        </div>
+
+        <div class="btn-group" style="margin-top: 1rem;">
+          <button type="button" class="action-btn half-btn" id="btn-rand-params">Randomize Params</button>
+          <button type="button" class="action-btn half-btn" id="btn-rand-all">Randomize All</button>
+        </div>
+
+        <button type="button" class="action-btn" id="vary-btn" style="margin-top: 0.5rem; margin-bottom: 0.5rem;">Vary seed within archetype</button>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; padding: 0.5rem 0.8rem; border: 1px solid #2a2318; border-radius: 6px; background: #15120f;">
+          <label class="section-title" style="margin: 0; color: #5a4e3a;">Visual Seed:</label>
+          <input type="number" id="input-manual-seed" placeholder="0000" style="background: transparent; border: none; color: #c4a882; font-family: monospace; font-size: 0.9rem; text-align: right; width: 80px; outline: none;">
+        </div>
+
+        <div class="hexagram-container">
+          <div class="hexagram-lines" id="hexagram-lines"></div>
+          <div>
+            <div class="archetype-label">Archetype</div>
+            <div class="archetype-name" id="archetype-name">Unknown form</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 1rem;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+          <p class="section-title" style="margin: 0;">Visual prophecy</p>
+          <button type="button" id="btn-save" class="engine-btn" style="flex: 0 1 auto; padding: 0.3rem 0.8rem; border-color: #8b7355; color: #8b7355;">
+            Save Image
+          </button>
+        </div>
+        
+        <div class="canvas-wrapper">
+          <div class="canvas-container" id="canvas-container">
+            <canvas id="glimpse-canvas"></canvas>
+          </div>
+
+          <div class="prophecy-box" id="external-prophecy-box">
+            <p class="prophecy-text" id="prophecy-text"></p>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: baseline; justify-content: space-between; margin-top: 0.5rem; gap: 1rem;">
+            <p class="section-title" style="margin: 0;">Prophecy Override</p>
+            <button type="button" class="action-btn" id="btn-generate-prophecy" style="flex: 0 1 auto; font-size: 0.65rem; padding: 0.4rem 0.8rem; border-radius: 4px; margin-bottom: 0;">Generate Random Prophecy</button>
+        </div>
+        <textarea id="custom-text-input" class="custom-text" placeholder="Write a custom prophecy here..."></textarea>
+        
+        <p class="section-title" style="margin-top: 0.5rem;">Custom Web Font (URL)</p>
+        <input type="text" id="font-url-input" placeholder="Paste .ttf / .woff font URL here...">
+
+        <p class="section-title" style="margin-top: 0.5rem;">Image Text Scale</p>
+        <div style="display: flex; align-items: center; gap: 0.8rem; margin-bottom: 1rem;">
+          <input type="range" min="1" max="10" value="5" id="input-text-size" style="flex: 1;">
+          <span id="val-text-size" style="font-size: 0.72rem; color: #8b7355; width: 30px; text-align: right;">1.0x</span>
+        </div>
+
+        <details>
+          <summary>Visual knob values & history</summary>
+          <div class="knob-readout" id="knob-readout"></div>
+          <div class="history-log" id="seed-history">History: None</div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const PARAM_CONFIG = [
+      { id: "urgency", label: "Urgency", lo: "dormant", hi: "pressing" },
+      { id: "risk", label: "Risk", lo: "measured", hi: "exposed" },
+      { id: "emotion", label: "Emotional weight", lo: "contained", hi: "flooding" },
+      { id: "time", label: "Time horizon", lo: "distant", hi: "immediate" },
+      { id: "clarity", label: "Clarity", lo: "diffuse", hi: "clear" },
+      { id: "chaos", label: "Chaos", lo: "ordered", hi: "turbulent" }
+    ];
+
+    const MANUAL_PARAM_CONFIG = [
+      { id: "inkThickness", label: "Ink Thickness", min: 0, max: 1, step: 0.01, default: 0.35 },
+      { id: "gritAmount", label: "Grit Amount", min: 0, max: 1, step: 0.01, default: 0.15 },
+      { id: "carverStrength", label: "Carver Strength", min: 0, max: 5, step: 0.1, default: 1.0 },
+      { id: "ridgeSharpness", label: "Ridge Sharpness", min: 0, max: 5, step: 0.1, default: 2.0 },
+      { id: "zoom", label: "Zoom Base", min: 0.001, max: 0.03, step: 0.001, default: 0.008 },
+      { id: "warpStrength", label: "Warp Amplitude", min: 0, max: 500, step: 1, default: 150 },
+      { id: "warpFreq", label: "Warp Frequency", min: 0.0001, max: 0.01, step: 0.0001, default: 0.002 },
+      { id: "gritFreq", label: "Grit Frequency", min: 0.01, max: 0.5, step: 0.01, default: 0.1 },
+      { id: "carverFreq", label: "Carver Frequency", min: 0.0001, max: 0.01, step: 0.0001, default: 0.002 },
+      { id: "erosionStrength", label: "Erosion Intensity", min: 0, max: 1, step: 0.01, default: 0.3 },
+      { id: "asymmetry", label: "Asymmetry (Tear)", min: 0, max: 1, step: 0.01, default: 0.0 }
+    ];
+
+    const ARCHETYPE_NAMES = {
+      "000000": "The Still Lake",       "000001": "The Quiet Tremor",
+      "000010": "The Empty Throne",     "000011": "The Waiting Gate",
+      "000100": "The Clear Mirror",     "000101": "The Veiled Eye",
+      "000110": "The Open Hand",        "000111": "The Held Breath",
+      "001000": "The Deep Root",        "001001": "The Buried Seed",
+      "001010": "The Dark Water",       "001011": "The Sunken Bell",
+      "001100": "The Steady Ground",    "001101": "The Worn Stone",
+      "001110": "The Patient Weight",   "001111": "The Resting Form",
+      "010000": "The Sharp Ridge",      "010001": "The Cracked Edge",
+      "010010": "The Divided Path",     "010011": "The Crossroads",
+      "010100": "The Broken Seal",      "010101": "The Torn Veil",
+      "010110": "The Split River",      "010111": "The Forked Flame",
+      "011000": "The Dangerous Depth",  "011001": "The Hidden Knife",
+      "011010": "The Chasm",            "011011": "The Abyss",
+      "011100": "The Precise Cut",      "011101": "The Surgical Eye",
+      "011110": "The Wound That Heals", "011111": "The Marked Threshold",
+      "100000": "The Rising Tide",      "100001": "The Held Fire",
+      "100010": "The Compressed Sky",   "100011": "The Storm Crown",
+      "100100": "The Swift Wing",       "100101": "The Arrow Loosed",
+      "100110": "The Urgent Hand",      "100111": "The Pressed Hour",
+      "101000": "The Heavy Crown",      "101001": "The Ancient Weight",
+      "101010": "The Sinking Stone",    "101011": "The Long Dusk",
+      "101100": "The Iron Patience",    "101101": "The Slow River",
+      "101110": "The Bearing Form",     "101111": "The Grounded Force",
+      "110000": "The Fracture",         "110001": "The Wild Edge",
+      "110010": "The Storm Break",      "110011": "The Scattered Crown",
+      "110100": "The Shattered Mirror", "110101": "The Broken Pattern",
+      "110110": "The Eruption",         "110111": "The Unraveling",
+      "111000": "The Dark Current",     "111001": "The Undertow",
+      "111010": "The Collapse",         "111011": "The Overwhelm",
+      "111100": "The Critical Mass",    "111101": "The Detonation Point",
+      "111110": "The Chaos Bloom",      "111111": "The Everything",
+    };
+
+    let state = {
+      sliders: { urgency: 5, risk: 4, emotion: 7, time: 3, clarity: 6, chaos: 4 },
+      manualKnobs: {},
+      seed: 42,
+      textSeed: 42,
+      renderMode: 'super',
+      invert: false,
+      drawTextOnImage: false,
+      squeezeBlob: false, 
+      customText: "",
+      loadedFont: false,
+      textSize: 5,
+      refreshEffect: true,
+      slidersVisible: true,
+      engineOptsVisible: true,
+      manualSlidersVisible: false,
+      manualOverride: false,
+      history: []
+    };
+
+    function extractDimensions(sliders) {
+      return { urgency: sliders.urgency / 10, risk: sliders.risk / 10, emotion: sliders.emotion / 10, time: sliders.time / 10, clarity: sliders.clarity / 10, chaos: sliders.chaos / 10 };
+    }
+
+function getResolutionKnobs(d, seed, W) {
+      const archetypeOffset = (d.urgency > 0.5 ? 1000 : 0) + (d.risk > 0.5 ? 700 : 0) + (d.emotion > 0.5 ? 500 : 0) + (d.time > 0.5 ? 300 : 0) + (d.clarity > 0.5 ? 200 : 0) + (d.chaos > 0.5 ? 100 : 0);
+      const scale = W / 250;
+      return {
+        inkThickness: 0.25 + (d.emotion * 0.3 + d.urgency * 0.1) * 0.2,
+        gritAmount: 0.05 + (d.chaos * 0.8) * 0.25,
+        carverStrength: 1.0 + (d.risk * 0.8 - d.clarity * 0.3) * 0.8,
+        ridgeSharpness: 1.8 + (d.clarity * 0.5 + d.time * 0.3) * 0.8,
+        zoom: (0.0078 + (d.urgency * 0.4 - d.clarity * 0.2) * 0.002) / scale,
+        warpStrength: (96 + (d.emotion * 0.6 + d.chaos * 0.4) * 40) * scale,
+        warpFreq: (0.001 + d.time * 0.003) / scale,
+        gritFreq: (0.05 + d.time * 0.15) / Math.sqrt(scale), 
+        carverFreq: (0.001 + d.time * 0.003) / Math.sqrt(scale),
+        erosionStrength: Math.min(0.65, Math.max(0, 0.8 - (d.emotion * 0.6) + (d.chaos * 0.3) + (d.clarity * 0.2))),
+        
+        // NEW MATH: Pushes significant asymmetry strictly into the minority
+        asymmetry: Math.pow(d.urgency, 4), 
+        
+        seed: (seed + archetypeOffset) % 9999
+      };
+    }
+
+    function getManualScaledKnobs(W) {
+      const scale = W / 250;
+      return {
+        inkThickness: state.manualKnobs.inkThickness,
+        gritAmount: state.manualKnobs.gritAmount,
+        carverStrength: state.manualKnobs.carverStrength,
+        ridgeSharpness: state.manualKnobs.ridgeSharpness,
+        zoom: state.manualKnobs.zoom / scale,
+        warpStrength: state.manualKnobs.warpStrength * scale,
+        warpFreq: state.manualKnobs.warpFreq / scale,
+        gritFreq: state.manualKnobs.gritFreq / Math.sqrt(scale),
+        carverFreq: state.manualKnobs.carverFreq / Math.sqrt(scale),
+        erosionStrength: state.manualKnobs.erosionStrength,
+        asymmetry: state.manualKnobs.asymmetry,
+        seed: state.seed
+      };
+    }
+
+    function makeNoise(seed) {
+      const perm = new Uint8Array(512);
+      let s = (seed * 9301 + 49297) % 233280;
+      const rnd = () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
+      for (let i = 0; i < 256; i++) perm[i] = i;
+      for (let i = 255; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [perm[i], perm[j]] = [perm[j], perm[i]]; }
+      for (let i = 0; i < 256; i++) perm[i + 256] = perm[i];
+      function grad(hash, x, y) { const h = hash & 7; const u = h < 4 ? x : y, v = h < 4 ? y : x; return ((h & 1) ? -u : u) + ((h & 2) ? -v : v); }
+      function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+      function lerp(a, b, t) { return a + t * (b - a); }
+      function noise2(x, y) {
+        const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+        const xf = x - Math.floor(x), yf = y - Math.floor(y);
+        const u = fade(xf), v = fade(yf);
+        const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1], ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
+        return lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u), lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v) * 0.5 + 0.5;
+      }
+      return { fractal: (x, y, oct = 12, fall = 0.5) => { let val = 0, amp = 1, freq = 1, maxAmp = 0; for (let o = 0; o < oct; o++) { val += noise2(x * freq, y * freq) * amp; maxAmp += amp; amp *= fall; freq *= 2; } return val / maxAmp; } };
+    }
+
+    function generateBlobData(W, H, noise, knobs, squeeze, reservedH) {
+      const cx = W / 2, cy = (squeeze && reservedH > 0) ? (H / 2) - (reservedH * 0.2) : (H / 2); 
+      const maxDist = Math.max(W, H) / 2;
+      const noiseMap = new Float32Array(W * H); // Now rendering full width to support asymmetry
+      let minVal = 1e9, maxVal = -1e9;
+      const screenRatio = (squeeze && reservedH > 0) ? (W / (H - reservedH)) : (W / H); 
+      const octaves = W > 300 ? 16 : 12;
+
+      for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) {
+          
+          let symX = x;
+          // Core symmetry logic with dynamic distortion
+          if (x > cx) {
+            symX = W - x;
+            if (knobs.asymmetry > 0) {
+              const distFromCenter = (x - cx) / cx; // Fades the distortion in from the center line
+              const asymOffset = (noise.fractal(x * 0.01, y * 0.01, 3, 0.5) - 0.5) * (knobs.asymmetry * W * 0.6) * distFromCenter;
+              symX += asymOffset;
+            }
+          }
+
+          const xW = noise.fractal(symX * knobs.warpFreq, y * knobs.warpFreq, 4, 0.5) * knobs.warpStrength;
+          const yW = noise.fractal(symX * knobs.warpFreq + 100, y * knobs.warpFreq + 100, 4, 0.5) * knobs.warpStrength;
+          const n = noise.fractal((symX + xW) * knobs.zoom, (y + yW) * knobs.zoom, octaves, 0.5);
+          
+          let val = (1.0 - Math.abs(n - 0.5) * knobs.ridgeSharpness) + (noise.fractal(symX * knobs.gritFreq, y * knobs.gritFreq, 3, 0.5) * knobs.gritAmount);
+          val *= (noise.fractal(symX * knobs.carverFreq + 500, y * knobs.carverFreq + 500, 4, 0.5) * knobs.carverStrength);
+          
+          const erosionNoise = noise.fractal(symX * knobs.carverFreq * 3 + 200, y * knobs.carverFreq * 3 + 200, octaves - 2, 0.5);
+          val -= erosionNoise * knobs.erosionStrength;
+
+          const dx = x - cx, dy = (y - cy) * screenRatio; 
+          val *= Math.pow(Math.max(0, Math.min(1, 1 - (Math.sqrt(dx * dx + dy * dy) / (maxDist * 0.85)))), 0.5);
+          
+          noiseMap[x * H + y] = val;
+          if (val < minVal) minVal = val; if (val > maxVal) maxVal = val;
+        }
+      }
+      return { noiseMap, minVal, maxVal };
+    }
+
+    function applyThresholdAndCenter(imgData, noiseData, W, H, thresh, bgCol, inkCol, reservedH, isHiResPass = false) {
+      const { noiseMap, minVal, maxVal } = noiseData;
+      const px = imgData.data; const range = maxVal - minVal || 1;
+      const basePadding = 6; 
+      const safetyPadding = isHiResPass ? basePadding * 4 : basePadding;
+      
+      let minInkY = H, maxInkY = 0;
+      for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) {
+          const norm = (noiseMap[x * H + y] - minVal) / range;
+          if (norm > thresh) {
+            if (y < minInkY) minInkY = y;
+            if (y > maxInkY) maxInkY = y;
+          }
+        }
+      }
+
+      let shiftY = 0;
+      if (minInkY <= maxInkY) {
+        const topPaddingZone = safetyPadding;
+        const bottomSafeLineY = reservedH > 0 ? H - reservedH - safetyPadding : H - safetyPadding;
+        const availableSafeHeight = bottomSafeLineY - topPaddingZone;
+        
+        const blobHeight = maxInkY - minInkY;
+        const physicalCy = minInkY + (blobHeight / 2);
+        
+        const mathCy = topPaddingZone + (availableSafeHeight / 2);
+        const compositionAnchorOffset = reservedH > 0 ? Math.floor(0.2 * reservedH) : 0;
+        const targetCy = mathCy + compositionAnchorOffset;
+        
+        shiftY = Math.round(physicalCy - targetCy);
+        
+        if (minInkY - shiftY < topPaddingZone) { shiftY = minInkY - topPaddingZone; }
+        if (maxInkY - shiftY > bottomSafeLineY && reservedH > 0) { shiftY = maxInkY - bottomSafeLineY; }
+      }
+
+      for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) {
+          let srcY = y + shiftY; 
+          let isInk = false;
+          
+          if (reservedH > 0 && y >= H - reservedH) {
+              isInk = false; 
+          } else if (srcY >= 0 && srcY < H) {
+              const norm = (noiseMap[x * H + srcY] - minVal) / range;
+              if (norm > thresh) isInk = true;
+          }
+          
+          const col = isInk ? inkCol : bgCol; 
+          const ri = (y * W + x) * 4;
+          px[ri] = px[ri+1] = px[ri+2] = col; px[ri+3] = 255;
+        }
+      }
+    }
+
+    function applyDither(imgData, W, H) {
+      const dData = imgData.data; const bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+      for (let y = 0; y < H; y++) { for (let x = 0; x < W; x++) {
+          const idx = (y * W + x) * 4;
+          if (dData[idx] > ((bayer[(y % 4) * 4 + (x % 4)] + 0.5) / 16) * 255) dData[idx] = dData[idx+1] = dData[idx+2] = 255;
+          else dData[idx] = dData[idx+1] = dData[idx+2] = 0;
+      }}
+    }
+
+    function applyHardwareColorMap(ctx, W, H) {
+        const imgData = ctx.getImageData(0, 0, W, H);
+        const data = imgData.data;
+        
+        // Physical e-paper palette
+        const paperR = 238, paperG = 238, paperB = 233; 
+        const inkR = 26,    inkG = 24,    inkB = 22;    
+
+        for (let i = 0; i < data.length; i += 4) {
+            const lum = (data[i] + data[i+1] + data[i+2]) / 3;
+            const t = lum / 255;
+
+            data[i]   = inkR + (paperR - inkR) * t;
+            data[i+1] = inkG + (paperG - inkG) * t;
+            data[i+2] = inkB + (paperB - inkB) * t;
+        }
+        ctx.putImageData(imgData, 0, 0);
+    }
+
+    function renderProphecyTextOnCanvas(ctx, text, W, H, reservedH, invert, isHiRes, textScale) {
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      let fontSize = (isHiRes ? Math.max(16, Math.floor(W / 24)) : 11) * textScale;
+      ctx.font = `italic ${fontSize}px ${state.loadedFont ? "'CustomUserFont', serif" : "'Lora', serif"}`; 
+      ctx.lineWidth = isHiRes ? 4 : 2; ctx.strokeStyle = invert ? "#000000" : "#ffffff"; ctx.fillStyle = invert ? "#ffffff" : "#000000"; ctx.lineJoin = "round";
+      const words = text.split(' '); let lines = []; let currentLine = '';
+      for (let word of words) { let testLine = currentLine + word + ' '; if (ctx.measureText(testLine).width > W * 0.95 && currentLine !== '') { lines.push(currentLine); currentLine = word + ' '; } else currentLine = testLine; }
+      lines.push(currentLine);
+      const lineHeight = fontSize * 1.3; const startY = (H - reservedH) + (reservedH / 2) - ((lines.length * lineHeight) / 2) + (fontSize / 2);
+      lines.forEach((line, i) => { const dx = Math.floor(W / 2); const dy = Math.floor(startY + i * lineHeight); ctx.strokeText(line.trim(), dx, dy); ctx.fillText(line.trim(), dx, dy); });
+    }
+
+    function renderInkBlob(canvas) {
+      const ctx = canvas.getContext("2d"); const dims = extractDimensions(state.sliders);
+      const bgCol = state.invert ? 0 : 255, inkCol = state.invert ? 255 : 0;
+      const textScale = 0.5 + (state.textSize * 0.1); 
+      const activeText = state.customText.trim() !== "" ? state.customText : getProceduralProphecy(dims, state.textSeed);
+      let W, H, reservedH;
+
+      if (state.renderMode === 'p5') {
+        W = 650; H = 445; reservedH = state.drawTextOnImage ? Math.floor(110 * textScale) : 0;
+        canvas.width = W; canvas.height = H; 
+        const knobs = state.manualOverride ? getManualScaledKnobs(W) : getResolutionKnobs(dims, state.seed, W);
+        const noise = makeNoise(Math.floor(knobs.seed));
+        const noiseData = generateBlobData(W, H, noise, knobs, state.squeezeBlob, reservedH);
+        
+        ctx.fillStyle = state.invert ? "#000000" : "#ffffff"; ctx.fillRect(0, 0, W, H);
+        const imgData = ctx.createImageData(W, H); 
+        applyThresholdAndCenter(imgData, noiseData, W, H, 1.0 - knobs.inkThickness, bgCol, inkCol, reservedH, true);
+        ctx.putImageData(imgData, 0, 0); 
+        if (state.drawTextOnImage) renderProphecyTextOnCanvas(ctx, activeText, W, H, reservedH, state.invert, true, textScale);
+        
+        applyHardwareColorMap(ctx, W, H);
+
+      } else if (state.renderMode === 'std') {
+        W = 250; H = 122; reservedH = state.drawTextOnImage ? Math.floor(36 * textScale) : 0; 
+        canvas.width = W; canvas.height = H; 
+        const knobs = state.manualOverride ? getManualScaledKnobs(W) : getResolutionKnobs(dims, state.seed, W);
+        const noise = makeNoise(Math.floor(knobs.seed));
+        const noiseData = generateBlobData(W, H, noise, knobs, state.squeezeBlob, reservedH);
+        
+        ctx.fillStyle = state.invert ? "#000000" : "#ffffff"; ctx.fillRect(0, 0, W, H);
+        const imgData = ctx.createImageData(W, H); 
+        applyThresholdAndCenter(imgData, noiseData, W, H, 1.0 - knobs.inkThickness, bgCol, inkCol, reservedH, false);
+        ctx.putImageData(imgData, 0, 0);
+        
+        if (state.drawTextOnImage) renderProphecyTextOnCanvas(ctx, activeText, W, H, reservedH, state.invert, false, textScale);
+        
+        applyHardwareColorMap(ctx, W, H);
+
+      } else if (state.renderMode === 'super') {
+        W = 250; H = 122; reservedH = state.drawTextOnImage ? Math.floor(36 * textScale) : 0; 
+        canvas.width = W; canvas.height = H; 
+        const RW = W * 4, RH = H * 4, R_ReservedH = reservedH * 4;
+        const knobs = state.manualOverride ? getManualScaledKnobs(RW) : getResolutionKnobs(dims, state.seed, RW); 
+        const noise = makeNoise(Math.floor(knobs.seed));
+        const noiseData = generateBlobData(RW, RH, noise, knobs, state.squeezeBlob, R_ReservedH);
+        
+        const offCanvas = document.createElement("canvas"); offCanvas.width = RW; offCanvas.height = RH;
+        const offCtx = offCanvas.getContext("2d"); offCtx.fillStyle = state.invert ? "#000000" : "#ffffff"; offCtx.fillRect(0, 0, RW, RH);
+        const offImg = offCtx.createImageData(RW, RH); 
+        applyThresholdAndCenter(offImg, noiseData, RW, RH, 1.0 - knobs.inkThickness, bgCol, inkCol, R_ReservedH, true);
+        offCtx.putImageData(offImg, 0, 0); 
+        
+        ctx.fillStyle = state.invert ? "#000000" : "#ffffff"; ctx.fillRect(0, 0, W, H); ctx.drawImage(offCanvas, 0, 0, RW, RH, 0, 0, W, H);
+        const fImg = ctx.getImageData(0, 0, W, H); applyDither(fImg, W, H); ctx.putImageData(fImg, 0, 0);
+        
+        if (state.drawTextOnImage) renderProphecyTextOnCanvas(ctx, activeText, W, H, reservedH, state.invert, false, textScale);
+        
+        applyHardwareColorMap(ctx, W, H);
+      }
+    }
+
+    function getProceduralProphecy(dims, seed) {
+      let s = seed;
+      const rand = () => { s |= 0; s = s + 0x6D2B79F5 | 0; let t = Math.imul(s ^ s >>> 15, 1 | s); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+      const pick = (arr) => arr[Math.floor(rand() * arr.length)];
+      
+      const subjects = ["A shifting river", "An empty grand house", "A partner who sees your flaws", "Immense wealth with no time", "A blank waiting screen", "A shelter in a temporary place", "Praise exposing your doubt", "A secret in a quiet room", "An unrecognized city"];
+      let maxTrait = 'urgency', maxVal = dims.urgency;
+      for (const [key, val] of Object.entries(dims)) { if (val > maxVal) { maxVal = val; maxTrait = key; } }
+      const predicates = { urgency: ["demands a swift choice.", "means hesitation chooses for you.", "requires immediate action."], risk: ["proves exposure is the only way.", "reminds you safety is an illusion.", "forces a leap without looking."], emotion: ["teaches you to ride the tide.", "means surrendering to the current.", "shows your heart's true verdict."], time: ["reminds you patience outlasts panic.", "shows that waiting is the best action.", "proves foundations are built silently."], clarity: ["confirms you know the exact path.", "leaves only the absolute truth.", "proves the answer is already clear."], chaos: ["shows that plans are merely illusions.", "means broken pieces form new patterns.", "requires you to embrace the turbulence."] };
+      return `${pick(subjects)} ${pick(maxVal > 0.5 ? predicates[maxTrait] : ["reminds you stillness is a decision.", "allows observation without pressure.", "proves your intuition is awake."])}`;
+    }
+
+    function getArchetypeKey(dimensions) { return [dimensions.urgency > 0.5 ? "1" : "0", dimensions.risk > 0.5 ? "1" : "0", dimensions.emotion > 0.5 ? "1" : "0", dimensions.time > 0.5 ? "1" : "0", dimensions.clarity > 0.5 ? "1" : "0", dimensions.chaos > 0.5 ? "1" : "0"].join(""); }
+
+    function clearPresets() { document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active')); }
+
+    function rollRemainingParams(fixedKeys) {
+        PARAM_CONFIG.forEach(config => {
+            if (!fixedKeys.includes(config.id)) state.sliders[config.id] = Math.floor(Math.random() * 10) + 1;
+        });
+        state.seed = Math.floor(Math.random() * 9999) + 1;
+        state.textSeed = Math.floor(Math.random() * 9999) + 1;
+    }
+
+    window.loadSeedFromHistory = function(oldSeed) {
+        state.seed = parseInt(oldSeed);
+        document.getElementById('input-manual-seed').value = state.seed;
+        clearPresets();
+        updateUIElements();
+        triggerRender();
+    };
+
+    function initUI() {
+      document.getElementById('btn-super').onclick = () => setEngine('super'); document.getElementById('btn-std').onclick = () => setEngine('std'); document.getElementById('btn-p5').onclick = () => setEngine('p5');
+      document.getElementById('check-invert').onchange = (e) => { state.invert = e.target.checked; document.getElementById('canvas-container').style.background = state.invert ? '#000000' : '#ffffff'; triggerRender(); };
+      document.getElementById('check-draw-text').onchange = (e) => { state.drawTextOnImage = e.target.checked; document.getElementById('external-prophecy-box').style.display = state.drawTextOnImage ? 'none' : 'block'; triggerRender(); };
+      document.getElementById('check-squeeze-blob').onchange = (e) => { state.squeezeBlob = e.target.checked; triggerRender(); };
+      document.getElementById('check-refresh-effect').onchange = (e) => state.refreshEffect = e.target.checked;
+
+      // Engine Options Toggle
+      document.getElementById('btn-toggle-engine-opts').onclick = () => { 
+          state.engineOptsVisible = !state.engineOptsVisible; 
+          document.getElementById('btn-toggle-engine-opts').textContent = state.engineOptsVisible ? "[ Hide ]" : "[ Show ]"; 
+          document.getElementById('engine-options-wrapper').classList.toggle('collapsed', !state.engineOptsVisible); 
+      };
+
+      // Manual Engine Toggle (Auto-Collapse Logic)
+      document.getElementById('btn-toggle-manual-sliders').onclick = () => { 
+          state.manualSlidersVisible = !state.manualSlidersVisible; 
+          document.getElementById('btn-toggle-manual-sliders').textContent = state.manualSlidersVisible ? "[ Hide ]" : "[ Show ]"; 
+          document.getElementById('manual-sliders-wrapper').classList.toggle('collapsed', !state.manualSlidersVisible); 
+          
+          state.manualOverride = state.manualSlidersVisible; // Mode follows panel state
+
+          if (state.manualSlidersVisible) {
+              // Automatically Close Dilemma Section
+              state.slidersVisible = false;
+              document.getElementById('btn-toggle-sliders').textContent = "[ Show ]";
+              document.getElementById('sliders-wrapper').classList.add('collapsed');
+          }
+          
+          updateUIElements();
+          triggerRender();
+      };
+
+      // Dilemma Panel Toggle (Auto-Collapse Logic)
+      document.getElementById('btn-toggle-sliders').onclick = () => { 
+          state.slidersVisible = !state.slidersVisible; 
+          document.getElementById('btn-toggle-sliders').textContent = state.slidersVisible ? "[ Hide ]" : "[ Show ]"; 
+          document.getElementById('sliders-wrapper').classList.toggle('collapsed', !state.slidersVisible); 
+
+          if (state.slidersVisible) {
+              // Automatically Close Manual Override Section
+              state.manualSlidersVisible = false;
+              state.manualOverride = false; // Switch back to Dilemma logic
+              document.getElementById('btn-toggle-manual-sliders').textContent = "[ Show ]";
+              document.getElementById('manual-sliders-wrapper').classList.add('collapsed');
+          }
+          
+          updateUIElements();
+          triggerRender();
+      };
+
+      document.getElementById('custom-text-input').addEventListener('input', (e) => { state.customText = e.target.value; updateUIElements(); if (state.drawTextOnImage) triggerRender(); });
+      document.getElementById('input-text-size').addEventListener('input', (e) => { state.textSize = Number(e.target.value); document.getElementById('val-text-size').textContent = (0.5 + state.textSize * 0.1).toFixed(1) + 'x'; if (state.drawTextOnImage) triggerRender(); });
+      
+      document.getElementById('input-manual-seed').addEventListener('change', (e) => {
+          const val = parseInt(e.target.value);
+          if (!isNaN(val)) { state.seed = val; clearPresets(); updateUIElements(); triggerRender(); }
+      });
+      
+      document.getElementById('btn-generate-prophecy').onclick = () => { 
+          document.getElementById('custom-text-input').value = ""; state.customText = ""; 
+          state.textSeed = Math.floor(Math.random() * 9999) + 1; 
+          updateUIElements(); if (state.drawTextOnImage) triggerRender(); 
+      };
+
+      document.getElementById('btn-set-ethereal').onclick = () => { clearPresets(); document.getElementById('btn-set-ethereal').classList.add('active'); state.sliders.clarity = 10; state.sliders.emotion = 2; state.sliders.chaos = 3; rollRemainingParams(['clarity', 'emotion', 'chaos']); triggerRender(); updateUIElements(); };
+      document.getElementById('btn-set-monolith').onclick = () => { clearPresets(); document.getElementById('btn-set-monolith').classList.add('active'); state.sliders.emotion = 10; state.sliders.chaos = 1; state.sliders.clarity = 3; rollRemainingParams(['emotion', 'chaos', 'clarity']); triggerRender(); updateUIElements(); };
+      document.getElementById('btn-set-aggressive').onclick = () => { clearPresets(); document.getElementById('btn-set-aggressive').classList.add('active'); state.sliders.chaos = 10; state.sliders.risk = 10; state.sliders.urgency = 10; state.sliders.clarity = 8; rollRemainingParams(['chaos', 'risk', 'urgency', 'clarity']); triggerRender(); updateUIElements(); };
+
+      const container = document.getElementById("sliders-container");
+      PARAM_CONFIG.forEach(config => {
+        const wrapper = document.createElement("div"); wrapper.className = "slider-container";
+        wrapper.innerHTML = `<div class="slider-header"><span class="slider-label">${config.label}</span><span class="slider-value" id="val-${config.id}"></span></div><input type="range" min="1" max="10" value="${state.sliders[config.id]}" id="input-${config.id}"><div class="binary-track" id="track-${config.id}"></div>`;
+        container.appendChild(wrapper);
+        document.getElementById(`input-${config.id}`).addEventListener("input", (e) => { state.sliders[config.id] = Number(e.target.value); clearPresets(); updateUIElements(); triggerRender(); });
+      });
+
+      const manualContainer = document.getElementById("manual-sliders-container");
+      MANUAL_PARAM_CONFIG.forEach(config => {
+        state.manualKnobs[config.id] = config.default;
+        const wrapper = document.createElement("div"); wrapper.className = "slider-container";
+        wrapper.innerHTML = `
+            <div class="slider-header">
+                <span class="slider-label">${config.label}</span>
+                <span class="slider-value" id="val-manual-${config.id}">${config.default}</span>
+            </div>
+            <input type="range" min="${config.min}" max="${config.max}" step="${config.step}" value="${config.default}" id="input-manual-${config.id}">
+        `;
+        manualContainer.appendChild(wrapper);
+        document.getElementById(`input-manual-${config.id}`).addEventListener("input", (e) => {
+            state.manualKnobs[config.id] = parseFloat(e.target.value);
+            document.getElementById(`val-manual-${config.id}`).textContent = state.manualKnobs[config.id];
+            if (state.manualOverride) { updateUIElements(); triggerRender(); }
+        });
+      });
+
+      document.getElementById("btn-rand-params").addEventListener("click", () => { PARAM_CONFIG.forEach(config => { state.sliders[config.id] = Math.floor(Math.random() * 10) + 1; }); state.textSeed = Math.floor(Math.random() * 9999) + 1; clearPresets(); updateUIElements(); triggerRender(); });
+      document.getElementById("btn-rand-all").addEventListener("click", () => { PARAM_CONFIG.forEach(config => { state.sliders[config.id] = Math.floor(Math.random() * 10) + 1; }); state.seed = Math.floor(Math.random() * 9999) + 1; state.textSeed = Math.floor(Math.random() * 9999) + 1; clearPresets(); updateUIElements(); triggerRender(); });
+      document.getElementById("vary-btn").addEventListener("click", () => { state.seed = (state.seed + Math.floor(Math.random() * 500) + 1) % 9999; state.textSeed = Math.floor(Math.random() * 9999) + 1; triggerRender(); updateUIElements(); });
+      document.getElementById("btn-save").addEventListener("click", (e) => { e.preventDefault(); const canvas = document.getElementById("glimpse-canvas"); const link = document.createElement('a'); link.download = `glimpse_${state.seed}.png`; link.href = canvas.toDataURL('image/png'); link.click(); });
+      
+      updateUIElements();
+      document.fonts.ready.then(() => triggerRender());
+    }
+
+    function setEngine(mode) { 
+      state.renderMode = mode; 
+      ['btn-super', 'btn-std', 'btn-p5'].forEach(id => document.getElementById(id).classList.remove('active'));
+      document.getElementById(`btn-${mode}`).classList.add('active'); 
+      updateUIElements(); triggerRender(); 
+    }
+
+    function updateUIElements() {
+      const dims = extractDimensions(state.sliders); 
+      const activeKnobs = state.manualOverride ? getManualScaledKnobs(250) : getResolutionKnobs(dims, state.seed, 250); 
+      const archKey = getArchetypeKey(dims);
+      
+      const activeText = state.customText.trim() !== "" ? state.customText : getProceduralProphecy(dims, state.textSeed);
+      document.getElementById("prophecy-text").textContent = `"${activeText}"`;
+      
+      document.getElementById('input-manual-seed').value = state.seed; 
+      
+      PARAM_CONFIG.forEach(config => {
+        const val = state.sliders[config.id]; const isH = val >= 5.5; const valText = document.getElementById(`val-${config.id}`);
+        valText.textContent = `${isH ? config.hi : config.lo} \u00B7 ${val}`; valText.style.color = isH ? "#c4a882" : "#5a4e3a";
+        document.getElementById(`input-${config.id}`).value = val; 
+        const track = document.getElementById(`track-${config.id}`); track.innerHTML = "";
+        for (let i = 0; i < 10; i++) { const seg = document.createElement("div"); seg.className = "binary-segment"; seg.style.background = i < val ? "#8b7355" : "#2a2318"; track.appendChild(seg); }
+      });
+
+      const hexContainer = document.getElementById("hexagram-lines"); hexContainer.innerHTML = "";
+      [dims.urgency, dims.risk, dims.emotion, dims.time, dims.clarity, dims.chaos].forEach(v => {
+        const line = document.createElement("div"); line.className = "hex-line-wrap";
+        if (v > 0.5) line.innerHTML = `<div class="hex-line-solid"></div>`;
+        else line.innerHTML = `<div class="hex-line-broken-part"></div><div class="hex-line-broken-part"></div>`;
+        hexContainer.appendChild(line);
+      });
+      
+      document.getElementById("archetype-name").textContent = state.manualOverride ? "Manual Override Active" : (ARCHETYPE_NAMES[archKey] || "Form " + archKey);
+      
+      document.getElementById("knob-readout").innerHTML = Object.entries(activeKnobs).map(([k, v]) => `<div><span>${k}</span>: ${typeof v === 'number' ? v.toFixed(4) : v}</div>`).join("");
+      
+      if (state.history[0] !== state.seed) {
+        state.history = [state.seed, ...state.history].slice(0, 5);
+        document.getElementById("seed-history").innerHTML = "Recent Seeds: " + state.history.map(s => `<span class="seed-link" onclick="loadSeedFromHistory(${s})">${s}</span>`).join(", ");
+      }
+    }
+
+    let renderTimeout;
+    function triggerRender() {
+      const container = document.getElementById("canvas-container");
+      container.classList.add("rendering");
+      if(state.refreshEffect) { container.classList.remove("refreshing"); void container.offsetWidth; container.classList.add("refreshing"); }
+      clearTimeout(renderTimeout);
+      renderTimeout = setTimeout(() => { renderInkBlob(document.getElementById("glimpse-canvas")); container.classList.remove("rendering"); }, 150); 
+    }
+    initUI();
+  </script>
+</body>
+</html>

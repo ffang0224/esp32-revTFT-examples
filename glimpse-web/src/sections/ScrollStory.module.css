@@ -1,0 +1,56 @@
+.section {
+  position: relative;
+  height: 300vh;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.labelWrap {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 6vw;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.label {
+  position: absolute;
+  max-width: 280px;
+  text-align: right;
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+
+.active {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.num {
+  font-family: 'Playfair Display', serif;
+  font-size: 4.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(41, 151, 255, 0.2);
+  margin-bottom: 0.3rem;
+}
+
+.title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.1rem;
+  font-style: italic;
+  color: var(--accent);
+  margin-bottom: 0.5rem;
+}
+
+.body {
+  font-size: 0.82rem;
+  line-height: 1.8;
+  color: var(--text-muted);
+}

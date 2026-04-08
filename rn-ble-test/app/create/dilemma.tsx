@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,15 +10,25 @@ import {
   Platform,
   Animated,
   Easing,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useDilemma } from "../../contexts";
+import { generateDilemmaSuggestions } from "../../services/openrouter";
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/design";
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+
+const API_KEY_STORAGE_KEY = "openrouter_api_key";
 
 export default function DilemmaScreen() {
   const router = useRouter();
   const { draft, setDraftText } = useDilemma();
   const [localText, setLocalText] = useState(draft.text || "");
+  const [apiKey, setApiKey] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
   // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -28,8 +38,11 @@ export default function DilemmaScreen() {
   const inputScale = useRef(new Animated.Value(0.9)).current;
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const buttonTranslateY = useRef(new Animated.Value(30)).current;
+  const suggestionsOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
+    loadApiKey();
+
     // Staggered entrance animations
     Animated.stagger(150, [
       // Header fades in
@@ -69,6 +82,13 @@ export default function DilemmaScreen() {
           useNativeDriver: true,
         }),
       ]),
+      // Suggestions fade in
+      Animated.timing(suggestionsOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
       // Button slides up
       Animated.parallel([
         Animated.timing(buttonOpacity, {
@@ -86,6 +106,46 @@ export default function DilemmaScreen() {
       ]),
     ]).start();
   }, []);
+
+  const loadApiKey = async () => {
+    try {
+      const envApiKey =
+        Constants.expoConfig?.extra?.openRouterApiKey ||
+        Constants.manifest?.extra?.openRouterApiKey ||
+        process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+
+      if (envApiKey) {
+        setApiKey(envApiKey);
+      } else {
+        const savedKey = await SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+        if (savedKey) {
+          setApiKey(savedKey);
+        }
+      }
+    } catch (e) {
+      console.log("Error loading API key:", e);
+    }
+  };
+
+  const loadSuggestions = useCallback(async () => {
+    if (isLoadingSuggestions) return;
+
+    setIsLoadingSuggestions(true);
+    try {
+      const newSuggestions = await generateDilemmaSuggestions(apiKey, 4);
+      setSuggestions(newSuggestions);
+      setShowSuggestions(true);
+    } catch (e) {
+      console.log("Failed to load suggestions:", e);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [apiKey, isLoadingSuggestions]);
+
+  const handleSuggestionPress = (suggestion: string) => {
+    setLocalText(suggestion);
+    setShowSuggestions(false);
+  };
 
   const handleNext = () => {
     if (localText.trim()) {
@@ -120,7 +180,11 @@ export default function DilemmaScreen() {
         </Animated.View>
 
         {/* Content */}
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View
             style={{
               opacity: titleOpacity,
@@ -136,7 +200,6 @@ export default function DilemmaScreen() {
 
           <Animated.View
             style={{
-              flex: 1,
               opacity: inputOpacity,
               transform: [{ scale: inputScale }],
             }}
@@ -152,7 +215,53 @@ export default function DilemmaScreen() {
               textAlignVertical="top"
             />
           </Animated.View>
-        </View>
+
+          {/* Suggestions Section */}
+          <Animated.View style={[styles.suggestionsContainer, { opacity: suggestionsOpacity }]}>
+            {!showSuggestions ? (
+              <TouchableOpacity
+                style={styles.suggestionToggle}
+                onPress={loadSuggestions}
+                disabled={isLoadingSuggestions}
+              >
+                <Text style={styles.suggestionToggleText}>
+                  {isLoadingSuggestions ? "Loading..." : "Need inspiration?"}
+                </Text>
+                <Text style={styles.suggestionToggleIcon}>💡</Text>
+              </TouchableOpacity>
+            ) : (
+              <View>
+                <View style={styles.suggestionsHeader}>
+                  <Text style={styles.suggestionsTitle}>Quick suggestions</Text>
+                  <TouchableOpacity onPress={loadSuggestions} disabled={isLoadingSuggestions}>
+                    <Text style={styles.refreshText}>
+                      {isLoadingSuggestions ? "..." : "↻ Refresh"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.suggestionsList}>
+                  {suggestions.map((suggestion, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionChip}
+                      onPress={() => handleSuggestionPress(suggestion)}
+                    >
+                      <Text style={styles.suggestionChipText} numberOfLines={2}>
+                        {suggestion}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={styles.hideSuggestions}
+                  onPress={() => setShowSuggestions(false)}
+                >
+                  <Text style={styles.hideSuggestionsText}>Hide suggestions</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Animated.View>
+        </ScrollView>
 
         {/* Footer */}
         <Animated.View
@@ -249,7 +358,72 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderRadius: borderRadius.lg,
     ...shadows.sm,
+    minHeight: 120,
     maxHeight: 200,
+  },
+  suggestionsContainer: {
+    marginTop: spacing.lg,
+  },
+  suggestionToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.md,
+    backgroundColor: colors.infoBg,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.info,
+    gap: spacing.sm,
+  },
+  suggestionToggleText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.info,
+  },
+  suggestionToggleIcon: {
+    fontSize: 16,
+  },
+  suggestionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  suggestionsTitle: {
+    ...typography.caption,
+    fontSize: 12,
+  },
+  refreshText: {
+    fontSize: 12,
+    color: colors.info,
+    fontWeight: "500",
+  },
+  suggestionsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  suggestionChip: {
+    backgroundColor: colors.card,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    maxWidth: "48%",
+    ...shadows.sm,
+  },
+  suggestionChipText: {
+    fontSize: 13,
+    color: colors.text,
+  },
+  hideSuggestions: {
+    marginTop: spacing.md,
+    alignItems: "center",
+  },
+  hideSuggestionsText: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
   footer: {
     padding: spacing.lg,

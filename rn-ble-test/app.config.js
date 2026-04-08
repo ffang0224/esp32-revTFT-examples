@@ -1,19 +1,23 @@
 export default {
   expo: {
-    name: "rn-ble-test",
+    name: "Glimpse",
     slug: "rn-ble-test",
-    version: "1.0.0",
+    version: "1.1.0",
     orientation: "portrait",
     icon: "./assets/images/icon.png",
-    scheme: "rnbletest",
-    userInterfaceStyle: "automatic",
+    scheme: "glimpse",
+    userInterfaceStyle: "light",
     newArchEnabled: true,
     ios: {
+      supportsTablet: false,
       infoPlist: {
         NSBluetoothAlwaysUsageDescription:
           "This app uses Bluetooth to connect to your FaustoBadge.",
+        NSBluetoothPeripheralUsageDescription:
+          "This app uses Bluetooth to connect to your FaustoBadge.",
+        UIBackgroundModes: ["bluetooth-central"],
       },
-      bundleIdentifier: "com.faustofang.rnbletest",
+      bundleIdentifier: "com.faustofang.glimpse",
     },
     android: {
       permissions: [
@@ -26,7 +30,7 @@ export default {
         "android.permission.BLUETOOTH_ADMIN",
         "android.permission.BLUETOOTH_CONNECT",
       ],
-      package: "com.anonymous.rnbletest",
+      package: "com.faustofang.glimpse",
     },
     web: {
       output: "static",
@@ -40,17 +44,23 @@ export default {
           image: "./assets/images/splash-icon.png",
           imageWidth: 200,
           resizeMode: "contain",
-          backgroundColor: "#ffffff",
+          backgroundColor: "#FAFAFA",
           dark: {
-            backgroundColor: "#000000",
+            backgroundColor: "#18181B",
           },
         },
       ],
-      "react-native-ble-plx",
+      [
+        "react-native-ble-plx",
+        {
+          isBackgroundEnabled: true,
+          modes: ["central"],
+          bluetoothAlwaysPermission: "Allow Glimpse to use Bluetooth to connect to your badge",
+        },
+      ],
     ],
     experiments: {
       typedRoutes: true,
-      reactCompiler: true,
     },
     extra: {
       openRouterApiKey: process.env.EXPO_PUBLIC_OPENROUTER_API_KEY,

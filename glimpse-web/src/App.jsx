@@ -9,6 +9,7 @@ import Lights from './canvas/Lights'
 
 import Nav from './sections/Nav'
 import Hero from './sections/Hero'
+import DilemmaStory from './sections/DilemmaStory'
 import ScrollStory from './sections/ScrollStory'
 import HowItWorks from './sections/HowItWorks'
 import Specs from './sections/Specs'
@@ -23,10 +24,8 @@ gsap.registerPlugin(ScrollTrigger)
 
 export default function App() {
   const lenisRef   = useRef(null)
-  const mainRef    = useRef(null)
-  const overlayRef = useRef(null)
-  const tlRef      = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
+  const [isDemoOpen, setIsDemoOpen] = useState(false)
 
   useEffect(() => {
     const lenis = new Lenis({
@@ -49,35 +48,34 @@ export default function App() {
   }, [])
 
   const openDemo = () => {
-    tlRef.current?.kill()
     setNavHidden(true)
-    tlRef.current = gsap.timeline()
-      .to(mainRef.current,    { opacity: 0, scale: 0.97, duration: 0.4, ease: 'power2.in' })
-      .to(overlayRef.current, { opacity: 1, duration: 0.4, ease: 'power2.out' }, '-=0.1')
-      .call(() => { overlayRef.current.style.pointerEvents = 'all' })
+    setIsDemoOpen(true)
   }
 
   const closeDemo = () => {
-    if (!overlayRef.current) return
-    tlRef.current?.kill()
-    overlayRef.current.style.pointerEvents = 'none'
-    tlRef.current = gsap.timeline()
-      .to(overlayRef.current, { opacity: 0, duration: 0.3, ease: 'power2.in' })
-      .to(mainRef.current,    { opacity: 1, scale: 1, duration: 0.4, ease: 'power2.out' }, '-=0.1')
-      .call(() => setNavHidden(false))
+    setIsDemoOpen(false)
+    setNavHidden(false)
   }
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') closeDemo()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   return (
     <>
       <Cursor />
-      <Nav lenisRef={lenisRef} hidden={navHidden} />
+      <Nav lenisRef={lenisRef} hidden={navHidden} onTryIt={openDemo} />
 
       {/* Fixed 3D canvas — receives drag events in areas not covered by main content */}
-      <div className={styles.canvasWrap}>
+      <div className={`${styles.canvasWrap} ${isDemoOpen ? styles.canvasDisabled : ''}`}>
         <Canvas
           frameloop="demand"
           dpr={[1, 1.5]}
-          camera={{ position: [0, 11, 5], fov: 38, near: 0.1, far: 1000 }}
+          camera={{ position: [0, 12.5, 6.8], fov: 38, near: 0.1, far: 1000 }}
           gl={{
             antialias: true,
             alpha: true,
@@ -97,8 +95,9 @@ export default function App() {
       </div>
 
       {/* pointer-events:none on main lets canvas receive drag events in empty areas */}
-      <main ref={mainRef} className={styles.main}>
-        <Hero onTryIt={openDemo} />
+      <main className={`${styles.main} ${isDemoOpen ? styles.mainHidden : ''}`}>
+        <Hero />
+        <DilemmaStory />
         <ScrollStory />
         <div className={styles.divider} />
         <HowItWorks />
@@ -106,7 +105,7 @@ export default function App() {
         <Footer />
       </main>
 
-      <DemoOverlay overlayRef={overlayRef} onClose={closeDemo} />
+      <DemoOverlay isOpen={isDemoOpen} onClose={closeDemo} />
     </>
   )
 }

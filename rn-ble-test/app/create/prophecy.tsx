@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,6 +10,9 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Pressable,
+  PanResponder,
+  Dimensions,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as SecureStore from "expo-secure-store";
@@ -20,12 +23,26 @@ import { generateProphecy, generateProphecyImage } from "../../services/openrout
 import { colors, spacing, borderRadius, typography, shadows } from "../../constants/design";
 
 const API_KEY_STORAGE_KEY = "openrouter_api_key";
+const { height: screenHeight } = Dimensions.get("window");
+
+// Drag interaction constants
+const DRAG_THRESHOLD_RATIO = 0.3; // fraction of screen height required to trigger send
+const MAX_DRAG_RATIO = 0.6; // max fraction of screen height card can travel
 
 export default function ProphecyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const { draft, getDilemma, saveDraft, updateDilemma, setDraftProphecy, getRandomValueIndices } = useDilemma();
-  const { connectedDevice, sendImageToBadge, isSendingImage } = useBle();
+  const {
+    connectedDevice,
+    sendImageToBadge,
+    isSendingImage,
+    transferState,
+    prepareImageBuffer,
+    cancelTransfer,
+    batteryData,
+    fetchBatteryData,
+  } = useBle();
 
   const existingDilemma = params.id ? getDilemma(params.id) : null;
   const dilemmaData = existingDilemma || draft;
@@ -42,6 +59,17 @@ export default function ProphecyScreen() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [apiKey, setApiKey] = useState("");
 
+  // Send interaction state (drag-based)
+  const [sendStage, setSendStage] = useState<"idle" | "dragging" | "sending" | "confirmed" | "error">("idle");
+
+  // Precomputed image buffer
+  const [preparedImage, setPreparedImage] = useState<{
+    binaryData: Uint8Array;
+    width: number;
+    height: number;
+  } | null>(null);
+  const [isPreparing, setIsPreparing] = useState(false);
+
   // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
   const dilemmaCardOpacity = useRef(new Animated.Value(0)).current;
@@ -52,12 +80,81 @@ export default function ProphecyScreen() {
   const previewScale = useRef(new Animated.Value(0.9)).current;
   const actionsOpacity = useRef(new Animated.Value(0)).current;
   const actionsTranslateY = useRef(new Animated.Value(30)).current;
-  
-  const pulseAnimRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Drag animation values
+  const dragY = useRef(new Animated.Value(0)).current;
+  const maxDrag = -screenHeight * MAX_DRAG_RATIO;
+  const dragScale = dragY.interpolate({
+    inputRange: [maxDrag, 0],
+    outputRange: [0.9, 1],
+    extrapolate: "clamp",
+  });
+  const dragOpacity = dragY.interpolate({
+    inputRange: [maxDrag, 0],
+    outputRange: [0.2, 1],
+    extrapolate: "clamp",
+  });
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  const sendButtonScale = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
+
+  // Drag gesture handler
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        if (!connectedDevice || !imageUrl || isSendingImage) return false;
+        const { dy, dx } = gestureState;
+        // Start when user drags upward more than a small threshold
+        return dy < -10 && Math.abs(dy) > Math.abs(dx);
+      },
+      onPanResponderGrant: () => {
+        if (!connectedDevice || !imageUrl || isSendingImage) return;
+        setSendStage("dragging");
+      },
+      onPanResponderMove: (_, gestureState) => {
+        if (!connectedDevice || !imageUrl || isSendingImage) return;
+        const { dy } = gestureState;
+        // Clamp to [maxDrag, 0]
+        const clamped = Math.max(maxDrag, Math.min(0, dy));
+        dragY.setValue(clamped);
+      },
+      onPanResponderRelease: async (_, gestureState) => {
+        const { dy } = gestureState;
+        const threshold = -screenHeight * DRAG_THRESHOLD_RATIO;
+
+        if (dy <= threshold && connectedDevice && imageUrl && !isSendingImage) {
+          // Commit send: finish drag upward, then trigger send
+          Animated.timing(dragY, {
+            toValue: maxDrag,
+            duration: 180,
+            useNativeDriver: true,
+            easing: Easing.out(Easing.cubic),
+          }).start();
+          await executeSend();
+        } else {
+          // Not enough drag: snap back
+          Animated.spring(dragY, {
+            toValue: 0,
+            useNativeDriver: true,
+            bounciness: 10,
+          }).start();
+          setSendStage("idle");
+        }
+      },
+      onPanResponderTerminate: () => {
+        Animated.spring(dragY, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 10,
+        }).start();
+        setSendStage("idle");
+      },
+    })
+  ).current;
 
   useEffect(() => {
     loadApiKey();
-    
+
     // Entrance animations
     Animated.stagger(120, [
       Animated.timing(headerOpacity, {
@@ -123,7 +220,64 @@ export default function ProphecyScreen() {
         }),
       ]),
     ]).start();
+
+    // Pulse animation for send button glow
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.15,
+          duration: 1000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 1000,
+          useNativeDriver: true,
+          easing: Easing.inOut(Easing.ease),
+        }),
+      ])
+    ).start();
   }, []);
+
+  // Sync with BLE transfer state
+  useEffect(() => {
+    if (transferState.stage === "done") {
+      setSendStage("confirmed");
+      // Success animation
+      Animated.sequence([
+        Animated.timing(sendButtonScale, {
+          toValue: 1.2,
+          duration: 150,
+          useNativeDriver: true,
+          easing: Easing.out(Easing.cubic),
+        }),
+        Animated.spring(sendButtonScale, {
+          toValue: 1,
+          tension: 200,
+          friction: 8,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (transferState.stage === "error") {
+      setSendStage("error");
+    } else if (transferState.stage === "sending_chunks" || transferState.stage === "waiting_ack") {
+      setSendStage("sending");
+    }
+  }, [transferState.stage, sendButtonScale]);
+
+  // Precompute image when generated
+  useEffect(() => {
+    if (imageUrl && !preparedImage && !isPreparing) {
+      setIsPreparing(true);
+      prepareImageBuffer(imageUrl).then((result) => {
+        if (result) {
+          setPreparedImage(result);
+        }
+        setIsPreparing(false);
+      });
+    }
+  }, [imageUrl, preparedImage, isPreparing, prepareImageBuffer]);
 
   const loadApiKey = async () => {
     try {
@@ -150,6 +304,8 @@ export default function ProphecyScreen() {
     setSelectedValues(newIndices);
     setProphecyText("");
     setImageUrl("");
+    setPreparedImage(null);
+    setSendStage("idle");
   };
 
   const handleGenerate = async () => {
@@ -171,6 +327,7 @@ export default function ProphecyScreen() {
     }
 
     setIsGenerating(true);
+    setPreparedImage(null);
 
     try {
       const value1 = dilemmaData.values[selectedValues[0]];
@@ -207,18 +364,15 @@ export default function ProphecyScreen() {
     }
   };
 
-  const handleSendToBadge = async () => {
-    if (!imageUrl || !prophecyText) {
-      Alert.alert("Error", "Please generate a prophecy first");
-      return;
+  const executeSend = async () => {
+    // Fallback for tap-to-send as well as drag-commit
+    if (!connectedDevice || !imageUrl || isSendingImage) return;
+    setSendStage("sending");
+    const success = await sendImageToBadge(imageUrl, prophecyText);
+    if (!success) {
+      setSendStage("error");
+      setTimeout(() => setSendStage("idle"), 2000);
     }
-
-    if (!connectedDevice) {
-      Alert.alert("Not Connected", "Please connect to your badge in Settings");
-      return;
-    }
-
-    await sendImageToBadge(imageUrl, prophecyText);
   };
 
   const handleDone = () => {
@@ -243,13 +397,47 @@ export default function ProphecyScreen() {
     }
   };
 
+  // Get send button state
+  const getSendButtonState = () => {
+    if (!connectedDevice) {
+      return { text: "Connect Badge First", disabled: true, color: colors.textMuted };
+    }
+    if (!imageUrl || !prophecyText) {
+      return { text: "Generate First", disabled: true, color: colors.textMuted };
+    }
+    if (sendStage === "dragging") {
+      return { text: "Drag up to send", disabled: false, color: colors.accent };
+    }
+    if (sendStage === "sending") {
+      const progress = transferState.progress || 0;
+      return { text: `Sending ${progress}%`, disabled: true, color: colors.accent };
+    }
+    if (sendStage === "confirmed") {
+      return { text: "Sent ✓", disabled: false, color: colors.success };
+    }
+    if (sendStage === "error") {
+      return { text: "Failed - Retry", disabled: false, color: colors.error };
+    }
+    // Default idle state
+    return { text: "Drag up to send", disabled: false, color: colors.success };
+  };
+
+  const sendButtonState = getSendButtonState();
+
   return (
     <SafeAreaView style={styles.container}>
       <Animated.View style={[styles.header, { opacity: headerOpacity }]}>
         <TouchableOpacity onPress={handleBack} style={styles.backButton}>
           <Text style={styles.backText}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Prophecy</Text>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerTitle}>Glimpse</Text>
+          {batteryData && (
+            <TouchableOpacity onPress={fetchBatteryData} style={styles.batteryChip}>
+              <Text style={styles.batteryText}>{batteryData.pct}%</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity onPress={handleDone} style={styles.doneButton}>
           <Text style={styles.doneText}>Done</Text>
         </TouchableOpacity>
@@ -303,33 +491,39 @@ export default function ProphecyScreen() {
           </View>
         </Animated.View>
 
-        {/* Preview */}
+        {/* Preview + Actions (draggable card) */}
         <Animated.View
-          style={[
-            styles.previewSection,
-            {
-              opacity: previewOpacity,
-              transform: [{ scale: previewScale }],
-            },
-          ]}
+          style={{
+            transform: [{ translateY: dragY }, { scale: dragScale }],
+            opacity: dragOpacity,
+          }}
+          {...panResponder.panHandlers}
         >
-          <ProphecyPreview
-            imageUrl={imageUrl || null}
-            prophecyText={prophecyText}
-            isLoading={isGenerating}
-          />
-        </Animated.View>
+          <Animated.View
+            style={[
+              styles.previewSection,
+              {
+                opacity: previewOpacity,
+                transform: [{ scale: previewScale }],
+              },
+            ]}
+          >
+            <ProphecyPreview
+              imageUrl={imageUrl || null}
+              prophecyText={prophecyText}
+              isLoading={isGenerating}
+            />
+          </Animated.View>
 
-        {/* Actions */}
-        <Animated.View
-          style={[
-            styles.actions,
-            {
-              opacity: actionsOpacity,
-              transform: [{ translateY: actionsTranslateY }],
-            },
-          ]}
-        >
+          <Animated.View
+            style={[
+              styles.actions,
+              {
+                opacity: actionsOpacity,
+                transform: [{ translateY: actionsTranslateY }],
+              },
+            ]}
+          >
           <TouchableOpacity
             style={[styles.regenerateButton, isGenerating && styles.buttonDisabled]}
             onPress={handleRegenerate}
@@ -355,29 +549,73 @@ export default function ProphecyScreen() {
             )}
           </TouchableOpacity>
 
+          {/* Drag-up send interaction */}
           {prophecyText && imageUrl && (
-            <Animated.View>
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  (!connectedDevice || isSendingImage) && styles.buttonDisabled,
-                ]}
-                onPress={handleSendToBadge}
-                disabled={!connectedDevice || isSendingImage}
+            <View style={styles.sendButtonContainer}>
+              {/* Progress indicator */}
+              {sendStage === "sending" && (
+                <View style={styles.progressContainer}>
+                  <View style={styles.progressBarBackground}>
+                    <View
+                      style={[
+                        styles.progressBarFill,
+                        { width: `${transferState.progress}%` },
+                      ]}
+                    />
+                  </View>
+                </View>
+              )}
+
+              {/* Send button */}
+              <Animated.View
+                style={{
+                  transform: [{ scale: sendButtonState.disabled ? 1 : sendButtonScale }],
+                }}
               >
-                {isSendingImage ? (
+                <Pressable
+                  onPress={() => executeSend()}
+                  disabled={sendButtonState.disabled}
+                  style={({ pressed }) => [
+                    styles.sendButton,
+                    {
+                      backgroundColor: sendButtonState.color,
+                      opacity: pressed && !sendButtonState.disabled ? 0.9 : 1,
+                    },
+                  ]}
+                >
+                {sendStage === "sending" ? (
                   <>
                     <ActivityIndicator size="small" color={colors.card} />
-                    <Text style={styles.sendButtonText}>Sending...</Text>
+                    <Text style={styles.sendButtonText}>{sendButtonState.text}</Text>
                   </>
-                ) : (
-                  <Text style={styles.sendButtonText}>
-                    {connectedDevice ? "Send to Badge" : "Connect Badge First"}
-                  </Text>
+                ) : sendStage === "confirmed" ? (
+                  <>
+                    <Text style={styles.sendButtonEmoji}>✓</Text>
+                    <Text style={styles.sendButtonText}>{sendButtonState.text}</Text>
+                  </>
+                ) : sendStage === "error" ? (
+                  <>
+                    <Text style={styles.sendButtonEmoji}>✕</Text>
+                    <Text style={styles.sendButtonText}>{sendButtonState.text}</Text>
+                  </>
+                ) : ( // idle / dragging
+                  <>
+                    <Text style={styles.sendButtonText}>{sendButtonState.text}</Text>
+                    {(sendStage === "idle" || sendStage === "dragging") && connectedDevice && (
+                      <Text style={styles.sendButtonHint}>drag card up to send</Text>
+                    )}
+                  </>
                 )}
-              </TouchableOpacity>
-            </Animated.View>
+                </Pressable>
+              </Animated.View>
+
+              {/* Status messages */}
+              {transferState.error && (
+                <Text style={styles.errorText}>{transferState.error}</Text>
+              )}
+            </View>
           )}
+          </Animated.View>
         </Animated.View>
       </ScrollView>
     </SafeAreaView>
@@ -453,8 +691,22 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: colors.text,
   },
+  headerCenter: {
+    alignItems: "center",
+  },
   headerTitle: {
     ...typography.subheading,
+  },
+  batteryChip: {
+    marginTop: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    backgroundColor: colors.accentLight,
+    borderRadius: borderRadius.full,
+  },
+  batteryText: {
+    fontSize: 11,
+    color: colors.textMuted,
   },
   doneButton: {
     paddingHorizontal: spacing.md,
@@ -561,20 +813,93 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: colors.card,
   },
+  sendButtonContainer: {
+    marginTop: spacing.md,
+    alignItems: "center",
+  },
+  glowRing: {
+    position: "absolute",
+    width: 200,
+    height: 60,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.success,
+    opacity: 0,
+  },
+  chargeRing: {
+    position: "absolute",
+    width: 200,
+    height: 60,
+    borderRadius: borderRadius.md,
+    borderWidth: 3,
+    borderColor: colors.success,
+  },
   sendButton: {
     backgroundColor: colors.success,
     paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
     borderRadius: borderRadius.md,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
     gap: spacing.sm,
     ...shadows.md,
+    minWidth: 200,
+    minHeight: 56,
   },
   sendButtonText: {
     fontSize: 16,
     fontWeight: "600",
     color: colors.card,
+  },
+  sendButtonEmoji: {
+    fontSize: 20,
+  },
+  sendButtonHint: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.7)",
+    marginLeft: spacing.xs,
+  },
+  progressContainer: {
+    position: "absolute",
+    top: -20,
+    width: "100%",
+    paddingHorizontal: spacing.xl,
+  },
+  progressBarBackground: {
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  progressBarFill: {
+    height: "100%",
+    backgroundColor: colors.success,
+    borderRadius: 2,
+  },
+  chargeIndicatorContainer: {
+    marginTop: spacing.sm,
+    alignItems: "center",
+  },
+  chargeBarBackground: {
+    width: 150,
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  chargeBarFill: {
+    height: "100%",
+    borderRadius: 2,
+  },
+  chargeText: {
+    marginTop: spacing.xs,
+    fontSize: 12,
+    color: colors.textMuted,
+  },
+  errorText: {
+    marginTop: spacing.sm,
+    fontSize: 12,
+    color: colors.error,
   },
   buttonDisabled: {
     opacity: 0.5,

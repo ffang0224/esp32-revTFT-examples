@@ -1,29 +1,24 @@
-import { useRef, useEffect } from 'react'
-import { useFrame, useThree } from '@react-three/fiber'
+import { useRef, useEffect, useMemo } from 'react'
+import { useFrame } from '@react-three/fiber'
 import { useGLTF, useTexture } from '@react-three/drei'
 import * as THREE from 'three'
-import { DEMO_IMAGES } from '../demoImages'
-
-// Shared mutable state — written by GSAP (DOM), read by R3F (canvas)
-export const scrollState = {
-  targetX: 0,
-  targetZ: 0,
-  targetRotY: Math.PI,
-  screenIndex: 0,
-  dragOffset: 0,
-  dragVelocity: 0,
-}
+import { scrollState } from './scrollState'
+import { STORY_SCREEN_IMAGES } from '../data/dilemmas'
 
 function lerp(a, b, t) { return a + (b - a) * t }
 
 export default function GlimpseModel() {
   const groupRef      = useRef()
   const screenMeshRef = useRef(null)
-  const currentTexRef = useRef(0)
+  const currentTexRef = useRef(STORY_SCREEN_IMAGES[0])
+  const blankColor = useMemo(() => new THREE.Color('#efeee8'), [])
 
-  const { gl }    = useThree()
   const { scene } = useGLTF('/glimpse_model4.glb')
-  const textures  = useTexture(DEMO_IMAGES)
+  const textures  = useTexture(STORY_SCREEN_IMAGES)
+  const textureMap = useMemo(
+    () => new Map(STORY_SCREEN_IMAGES.map((url, index) => [url, textures[index]])),
+    [textures]
+  )
 
   // Configure textures once
   useEffect(() => {
@@ -46,48 +41,10 @@ export default function GlimpseModel() {
       node.material.opacity = 1
       if (node.name.toLowerCase().includes('simulation_e_ink')) {
         screenMeshRef.current = node
-        node.material = new THREE.MeshBasicMaterial({ map: textures[0] })
+        node.material = new THREE.MeshBasicMaterial({ color: blankColor })
       }
     })
-  }, [scene, textures])
-
-  // Drag-to-rotate — listens on the canvas DOM element
-  useEffect(() => {
-    const canvas = gl.domElement
-    let dragging = false
-    let lastX = 0
-
-    const onDown = e => {
-      dragging = true
-      lastX = e.clientX
-      scrollState.dragVelocity = 0
-      canvas.style.cursor = 'grabbing'
-    }
-
-    const onMove = e => {
-      if (!dragging) return
-      const delta = (e.clientX - lastX) * 0.012
-      scrollState.dragOffset   += delta
-      scrollState.dragVelocity  = delta
-      lastX = e.clientX
-    }
-
-    const onUp = () => {
-      dragging = false
-      canvas.style.cursor = 'grab'
-    }
-
-    canvas.addEventListener('pointerdown', onDown)
-    window.addEventListener('pointermove', onMove)
-    window.addEventListener('pointerup', onUp)
-    canvas.style.cursor = 'grab'
-
-    return () => {
-      canvas.removeEventListener('pointerdown', onDown)
-      window.removeEventListener('pointermove', onMove)
-      window.removeEventListener('pointerup', onUp)
-    }
-  }, [gl])
+  }, [blankColor, scene, textures])
 
   const mx    = useRef(0)
   const mz    = useRef(0)
@@ -101,19 +58,27 @@ export default function GlimpseModel() {
     mz.current    = lerp(mz.current,    scrollState.targetZ,    0.05)
     mroty.current = lerp(mroty.current, scrollState.targetRotY, 0.04)
 
-    scrollState.dragVelocity *= 0.88
-    scrollState.dragOffset   += scrollState.dragVelocity
-    scrollState.dragOffset   *= 0.985
-
     groupRef.current.position.x = mx.current
     groupRef.current.position.y = Math.sin(t * 0.55) * 0.08
     groupRef.current.position.z = mz.current
-    groupRef.current.rotation.y = mroty.current + scrollState.dragOffset
+    groupRef.current.rotation.y = mroty.current
 
-    if (screenMeshRef.current && currentTexRef.current !== scrollState.screenIndex) {
-      const safeIdx = Math.max(0, Math.min(scrollState.screenIndex, textures.length - 1))
-      currentTexRef.current = safeIdx
-      screenMeshRef.current.material.map = textures[safeIdx]
+    if (screenMeshRef.current && !scrollState.screenVisible) {
+      screenMeshRef.current.material.map = null
+      screenMeshRef.current.material.color = blankColor
+      screenMeshRef.current.material.needsUpdate = true
+      currentTexRef.current = '__blank__'
+      invalidate()
+      return
+    }
+
+    const safeIdx = Math.max(0, Math.min(scrollState.screenIndex, STORY_SCREEN_IMAGES.length - 1))
+    const targetUrl = scrollState.screenImage ?? STORY_SCREEN_IMAGES[safeIdx] ?? STORY_SCREEN_IMAGES[0]
+
+    if (screenMeshRef.current && currentTexRef.current !== targetUrl) {
+      currentTexRef.current = targetUrl
+      screenMeshRef.current.material.map = textureMap.get(targetUrl) ?? textures[0]
+      screenMeshRef.current.material.color = new THREE.Color('#ffffff')
       screenMeshRef.current.material.needsUpdate = true
     }
 

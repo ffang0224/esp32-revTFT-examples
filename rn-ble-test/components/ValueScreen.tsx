@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   View,
   Text,
@@ -10,10 +10,16 @@ import {
   Platform,
   Animated,
   Easing,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useDilemma } from "../contexts";
+import { generateValueSuggestions } from "../services/openrouter";
 import { colors, spacing, borderRadius, typography, shadows } from "../constants/design";
+import * as SecureStore from "expo-secure-store";
+import Constants from "expo-constants";
+
+const API_KEY_STORAGE_KEY = "openrouter_api_key";
 
 const VALUE_PROMPTS = [
   "What matters most to you in this situation?",
@@ -41,6 +47,10 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
   const [localValue, setLocalValue] = useState(
     draft.values?.[valueIndex] || ""
   );
+  const [apiKey, setApiKey] = useState("");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
 
   // Animations
   const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -51,10 +61,13 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
   const buttonOpacity = useRef(new Animated.Value(0)).current;
   const buttonTranslateY = useRef(new Animated.Value(20)).current;
   const pillsOpacity = useRef(new Animated.Value(0)).current;
+  const suggestionsOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     setLocalValue(draft.values?.[valueIndex] || "");
-    
+
+    loadApiKey();
+
     // Reset and play animations
     headerOpacity.setValue(0);
     titleOpacity.setValue(0);
@@ -64,6 +77,7 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
     buttonOpacity.setValue(0);
     buttonTranslateY.setValue(20);
     pillsOpacity.setValue(0);
+    suggestionsOpacity.setValue(0);
 
     // Staggered entrance
     Animated.stagger(100, [
@@ -111,6 +125,13 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
         useNativeDriver: true,
         easing: Easing.out(Easing.cubic),
       }),
+      // Suggestions
+      Animated.timing(suggestionsOpacity, {
+        toValue: 1,
+        duration: 400,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
       // Button
       Animated.parallel([
         Animated.timing(buttonOpacity, {
@@ -129,6 +150,48 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
     ]).start();
   }, [stepNumber, draft.values, valueIndex]);
 
+  const loadApiKey = async () => {
+    try {
+      const envApiKey =
+        Constants.expoConfig?.extra?.openRouterApiKey ||
+        Constants.manifest?.extra?.openRouterApiKey ||
+        process.env.EXPO_PUBLIC_OPENROUTER_API_KEY;
+
+      if (envApiKey) {
+        setApiKey(envApiKey);
+      } else {
+        const savedKey = await SecureStore.getItemAsync(API_KEY_STORAGE_KEY);
+        if (savedKey) {
+          setApiKey(savedKey);
+        }
+      }
+    } catch (e) {
+      console.log("Error loading API key:", e);
+    }
+  };
+
+  const loadSuggestions = useCallback(async () => {
+    if (isLoadingSuggestions) return;
+
+    setIsLoadingSuggestions(true);
+    try {
+      // Only fetch contextual suggestions for later steps if we have a dilemma
+      const dilemma = draft.text;
+      const newSuggestions = await generateValueSuggestions(apiKey, dilemma, 4);
+      setSuggestions(newSuggestions);
+      setShowSuggestions(true);
+    } catch (e) {
+      console.log("Failed to load value suggestions:", e);
+    } finally {
+      setIsLoadingSuggestions(false);
+    }
+  }, [apiKey, draft.text, isLoadingSuggestions]);
+
+  const handleSuggestionPress = (suggestion: string) => {
+    setLocalValue(suggestion);
+    setShowSuggestions(false);
+  };
+
   const isLastStep = stepNumber === 4;
   const totalSteps = 5;
   const currentStep = stepNumber + 1;
@@ -136,7 +199,7 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
   const handleNext = () => {
     if (localValue.trim()) {
       setDraftValue(valueIndex, localValue.trim());
-      
+
       if (isLastStep) {
         router.push("/create/prophecy");
       } else {
@@ -186,7 +249,11 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
           <View style={styles.placeholder} />
         </Animated.View>
 
-        <View style={styles.content}>
+        <ScrollView
+          style={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Animated.View
             style={{
               opacity: titleOpacity,
@@ -218,6 +285,52 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
             />
           </Animated.View>
 
+          {/* Suggestions Section */}
+          <Animated.View style={[styles.suggestionsContainer, { opacity: suggestionsOpacity }]}>
+            {!showSuggestions ? (
+              <TouchableOpacity
+                style={styles.suggestionToggle}
+                onPress={loadSuggestions}
+                disabled={isLoadingSuggestions}
+              >
+                <Text style={styles.suggestionToggleText}>
+                  {isLoadingSuggestions ? "Loading..." : "Need inspiration?"}
+                </Text>
+                <Text style={styles.suggestionToggleIcon}>💡</Text>
+              </TouchableOpacity>
+            ) : (
+              <View>
+                <View style={styles.suggestionsHeader}>
+                  <Text style={styles.suggestionsTitle}>Common values</Text>
+                  <TouchableOpacity onPress={loadSuggestions} disabled={isLoadingSuggestions}>
+                    <Text style={styles.refreshText}>
+                      {isLoadingSuggestions ? "..." : "↻ Refresh"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.suggestionsList}>
+                  {suggestions.map((suggestion, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionChip}
+                      onPress={() => handleSuggestionPress(suggestion)}
+                    >
+                      <Text style={styles.suggestionChipText} numberOfLines={1}>
+                        {suggestion}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                <TouchableOpacity
+                  style={styles.hideSuggestions}
+                  onPress={() => setShowSuggestions(false)}
+                >
+                  <Text style={styles.hideSuggestionsText}>Hide suggestions</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </Animated.View>
+
           {valueIndex > 0 && (
             <Animated.View style={[styles.previousValues, { opacity: pillsOpacity }]}>
               <Text style={styles.previousTitle}>Your values so far:</Text>
@@ -226,7 +339,7 @@ export function ValueScreen({ stepNumber }: ValueScreenProps) {
               ))}
             </Animated.View>
           )}
-        </View>
+        </ScrollView>
 
         <Animated.View
           style={[
@@ -361,6 +474,70 @@ const styles = StyleSheet.create({
     borderRadius: borderRadius.lg,
     ...shadows.sm,
     fontWeight: "500",
+  },
+  suggestionsContainer: {
+    marginTop: spacing.lg,
+  },
+  suggestionToggle: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.md,
+    backgroundColor: colors.infoBg,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.info,
+    gap: spacing.sm,
+  },
+  suggestionToggleText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.info,
+  },
+  suggestionToggleIcon: {
+    fontSize: 16,
+  },
+  suggestionsHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.sm,
+  },
+  suggestionsTitle: {
+    ...typography.caption,
+    fontSize: 12,
+  },
+  refreshText: {
+    fontSize: 12,
+    color: colors.info,
+    fontWeight: "500",
+  },
+  suggestionsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  suggestionChip: {
+    backgroundColor: colors.accentLight,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    ...shadows.sm,
+  },
+  suggestionChipText: {
+    fontSize: 13,
+    color: colors.text,
+    fontWeight: "500",
+  },
+  hideSuggestions: {
+    marginTop: spacing.md,
+    alignItems: "center",
+  },
+  hideSuggestionsText: {
+    fontSize: 12,
+    color: colors.textMuted,
   },
   previousValues: {
     marginTop: spacing.xl,

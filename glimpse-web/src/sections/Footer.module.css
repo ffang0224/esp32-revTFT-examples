@@ -1,0 +1,33 @@
+.footer {
+  position: relative;
+  z-index: 10;
+  background: var(--bg-mid);
+  padding: 2.5rem 6vw;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid var(--border-dim);
+  pointer-events: auto;
+}
+
+.logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem;
+  color: var(--accent);
+}
+
+.right {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.link {
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.3s;
+}
+
+.link:hover {
+  color: var(--text);
+}

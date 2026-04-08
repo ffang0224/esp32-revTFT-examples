@@ -1,6 +1,6 @@
 import styles from './Hero.module.css'
 
-export default function Hero({ onTryIt }) {
+export default function Hero() {
   return (
     <section className={styles.hero} id="hero">
       <div className={styles.content}>
@@ -12,10 +12,6 @@ export default function Hero({ onTryIt }) {
           Glimpse is a pocket-sized e-ink companion that shows you what matters —
           one quiet image at a time.
         </p>
-        <button className={styles.tryItBtn} onClick={onTryIt}>
-          Try it
-        </button>
-        <p className={styles.dragHint}>Drag to rotate the model →</p>
       </div>
 
       <div className={styles.scrollHint}>

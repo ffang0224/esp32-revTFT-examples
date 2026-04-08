@@ -88,10 +88,74 @@ def init_eink_display(force_reinit=False):
     return eink_display
 
 
+def _mix_seed(seed, value):
+    seed = (seed ^ (value & 0xFFFFFFFF)) & 0xFFFFFFFF
+    seed = (seed * 1664525 + 1013904223) & 0xFFFFFFFF
+    return seed
+
+
+def _rand01(seed):
+    return ((seed >> 8) & 0xFFFFFF) / 16777215.0
+
+
+def generate_ink_blot(bitmap, seed):
+    """Generate mirrored Rorschach-style blot into a 1-bit bitmap."""
+    w = bitmap.width
+    h = bitmap.height
+    half_w = w // 2
+
+    blob_count = 8 + int(_rand01(_mix_seed(seed, 0xA5A5)) * 6)  # 8..13
+    blobs = []
+    local_seed = seed
+    for i in range(blob_count):
+        local_seed = _mix_seed(local_seed, i * 97 + 13)
+        r = 8 + int(_rand01(local_seed) * max(10, min(w, h) // 5))
+        local_seed = _mix_seed(local_seed, i * 131 + 29)
+        cx = int(half_w * (0.18 + _rand01(local_seed) * 0.70))
+        local_seed = _mix_seed(local_seed, i * 163 + 41)
+        cy = int(h * (0.18 + _rand01(local_seed) * 0.64))
+        local_seed = _mix_seed(local_seed, i * 193 + 53)
+        stretch = 0.70 + _rand01(local_seed) * 0.90
+        local_seed = _mix_seed(local_seed, i * 223 + 67)
+        weight = 0.70 + _rand01(local_seed) * 1.00
+        blobs.append((cx, cy, r, stretch, weight))
+
+    threshold = 0.78
+    center_x = (w - 1) * 0.5
+    center_y = (h - 1) * 0.5
+    inv_rx = 1.0 / max(1.0, w * 0.58)
+    inv_ry = 1.0 / max(1.0, h * 0.72)
+
+    for y in range(h):
+        for x in range(half_w + (w % 2)):
+            density = 0.0
+            for (cx, cy, r, stretch, weight) in blobs:
+                dx = (x - cx) / float(r)
+                dy = (y - cy) / float(r * stretch)
+                d2 = dx * dx + dy * dy
+                if d2 < 1.0:
+                    density += (1.0 - d2) * weight
+
+            rx = (x - center_x) * inv_rx
+            ry = (y - center_y) * inv_ry
+            radial = 1.0 - (rx * rx + ry * ry)
+            if radial < 0:
+                radial = 0
+            density *= radial
+
+            grain_seed = _mix_seed(seed, x * 73856093 ^ y * 19349663)
+            grain = (_rand01(grain_seed) - 0.5) * 0.20
+            bit = 1 if (density + grain) > threshold else 0
+
+            mirror_x = w - 1 - x
+            bitmap[x, y] = bit
+            bitmap[mirror_x, y] = bit
+
+
 def render_image(binary_data, width, height, prompt_text=""):
-    """Render 1-bit packed binary image data to e-ink display with split layout:
-    - Left side: square image (122x122)
-    - Right side: prompt text (128x122)
+    """Render 1-bit packed binary image data to e-ink display with stacked layout:
+    - Top: image region (center-cropped from source)
+    - Bottom: prompt text region
     """
     try:
         print(f"Rendering image to e-ink: {width}x{height}, data length: {len(binary_data)} bytes")
@@ -114,33 +178,25 @@ def render_image(binary_data, width, height, prompt_text=""):
         # Margins for cleaner look
         MARGIN = 6  # Pixels of margin around content
         
-        # Determine layout based on actual dimensions
-        # If display is wider than tall (250x122), use horizontal split (image left, text right)
-        # If display is taller than wide (122x250), use vertical split (image top, text bottom)
-        if display_width >= display_height:
-            # Horizontal layout: image on left, text on right
-            image_size = min(display_height - MARGIN * 2, display_width // 2 - MARGIN * 2, 122)
-            image_width = image_size
-            image_height = image_size
-            text_width = display_width - image_width - MARGIN * 3  # margin on left, between, right
-            text_height = display_height - MARGIN * 2
-            image_x = MARGIN
-            image_y = MARGIN
-            text_area_x = image_width + MARGIN * 2
-            text_area_y = MARGIN
-            layout = "horizontal"
-        else:
-            # Vertical layout: image on top, text on bottom
-            image_size = min(display_width - MARGIN * 2, display_height // 2 - MARGIN * 2, 122)
-            image_width = image_size
-            image_height = image_size
-            text_width = display_width - MARGIN * 2
-            text_height = display_height - image_height - MARGIN * 3  # margin on top, between, bottom
-            image_x = (display_width - image_width) // 2  # Center image horizontally
-            image_y = MARGIN
-            text_area_x = MARGIN
-            text_area_y = image_height + MARGIN * 2
-            layout = "vertical"
+        # Always use a stacked layout for the ink-blot style:
+        # image on top, text at the bottom.
+        # Keep a guaranteed text band when prompt text is present.
+        min_text_band = 30 if prompt_text else 0
+        max_text_band = 44
+        text_height = min(max_text_band, min_text_band + (len(prompt_text) // 24) * 8)
+        text_height = min(text_height, max(0, display_height - MARGIN * 3 - 24))
+
+        image_width = display_width - MARGIN * 2
+        image_height = display_height - text_height - MARGIN * 3
+        image_height = max(24, image_height)
+
+        text_width = display_width - MARGIN * 2
+        image_x = MARGIN
+        image_y = MARGIN
+        text_area_x = MARGIN
+        # Nudge text band slightly lower to better align with panel optics.
+        text_area_y = image_y + image_height + MARGIN + 2
+        layout = "stacked"
         
         print(f"Layout: {layout}, image area: {image_width}x{image_height} at ({image_x},{image_y}), text area: {text_width}x{text_height} at ({text_area_x},{text_area_y})")
         
@@ -159,53 +215,14 @@ def render_image(binary_data, width, height, prompt_text=""):
         img_palette[0] = 0xFFFFFF  # White
         img_palette[1] = 0x000000  # Black
         
-        # Unpack binary data (MSB first, bit=1 means Black)
-        # Data is a continuous stream of bits in row-major order
-        # Pixels are packed sequentially: pixel 0, pixel 1, pixel 2, ... pixel (width*height-1)
-        
-        # CENTER-CROP: If source is larger than target, take the center portion
-        # This ensures the image content stays centered even when cropping
-        crop_x_start = max(0, (width - actual_width) // 2)
-        crop_y_start = max(0, (height - actual_height) // 2)
-        crop_x_end = crop_x_start + actual_width
-        crop_y_end = crop_y_start + actual_height
-        
-        print(f"Center crop: source ({crop_x_start},{crop_y_start}) to ({crop_x_end},{crop_y_end})")
-        
-        # Unpack directly into the destination positions using (x, y) indexing
-        source_pixel_index = 0
-        pixels_set = 0
-        
-        # Process bytes sequentially
-        for byte in binary_data:
-            if source_pixel_index >= width * height:
-                break
-            
-            # Process 8 bits per byte, MSB first
-            for bit_pos in range(7, -1, -1):  # 7, 6, 5, 4, 3, 2, 1, 0
-                if source_pixel_index >= width * height:
-                    break
-                
-                # Calculate which row and column this source pixel is in
-                source_row = source_pixel_index // width
-                source_col = source_pixel_index % width
-                
-                # Check if this pixel is within our center-crop area
-                if (crop_y_start <= source_row < crop_y_end and 
-                    crop_x_start <= source_col < crop_x_end):
-                    # Calculate destination position in the cropped bitmap
-                    dst_x = source_col - crop_x_start
-                    dst_y = source_row - crop_y_start
-                    
-                    # Extract bit (MSB first)
-                    bit = (byte >> bit_pos) & 1
-                    # bit=1 means Black (palette index 1), bit=0 means White (palette index 0)
-                    img_bitmap[dst_x, dst_y] = bit
-                    pixels_set += 1
-                
-                source_pixel_index += 1
-        
-        print(f"Unpacked {pixels_set} pixels into {actual_width}x{actual_height} bitmap (center-cropped from {width}x{height})")
+        # Build a deterministic seed from payload+prompt and generate a mirrored ink blot.
+        seed = _mix_seed(0xC0FFEE, len(binary_data))
+        for b in binary_data[:128]:
+            seed = _mix_seed(seed, b)
+        for ch in prompt_text[:96]:
+            seed = _mix_seed(seed, ord(ch))
+        generate_ink_blot(img_bitmap, seed)
+        print(f"Generated ink blot in {actual_width}x{actual_height} area (seed={seed})")
         
         # Create a full-screen bitmap filled with white (to prevent tiling)
         screen_bitmap = displayio.Bitmap(display_width, display_height, 2)
@@ -242,8 +259,8 @@ def render_image(binary_data, width, height, prompt_text=""):
             try:
                 # Word wrap text to fit within text area
                 # Estimate: terminalio.FONT is about 6 pixels wide per character
-                chars_per_line = text_width // 6  # Rough estimate
-                max_lines = text_height // 8  # Rough estimate for line height
+                chars_per_line = max(1, text_width // 6)  # Rough estimate
+                max_lines = max(1, text_height // 8)  # Rough estimate for line height
                 max_chars = chars_per_line * max_lines
                 
                 # Simple word wrapping function
@@ -279,7 +296,6 @@ def render_image(binary_data, width, height, prompt_text=""):
                     terminalio.FONT,
                     text=wrapped_text,
                     color=0x000000,
-                    background_color=0xFFFFFF,
                 )
                 
                 # bitmap_label.Label is a TileGrid - access its bitmap
@@ -292,8 +308,8 @@ def render_image(binary_data, width, height, prompt_text=""):
                     
                     print(f"Label bitmap: {label_bitmap.width}x{label_bitmap.height}, using {label_w}x{label_h}")
                     
-                    # Center text vertically in the text area
-                    text_y_offset = max(0, (text_height - label_h) // 2)
+                    # Bottom-align text in the text band.
+                    text_y_offset = max(0, text_height - label_h)
                     # Center text horizontally in the text area (if text is narrower than text_width)
                     text_x_offset = max(0, (text_width - label_w) // 2)
                     
@@ -334,21 +350,12 @@ def render_image(binary_data, width, height, prompt_text=""):
             except Exception as text_err:
                 print(f"Text rendering error: {text_err}")
                 print(f"Error type: {type(text_err).__name__}")
-                # Fallback: draw a border around text area using (x, y) indexing
-                for x in range(text_width):
-                    dst_x = text_area_x + x
-                    if dst_x < display_width:
-                        if text_area_y < display_height:
-                            screen_bitmap[dst_x, text_area_y] = 1  # Top border
-                        if text_area_y + text_height - 1 < display_height:
-                            screen_bitmap[dst_x, text_area_y + text_height - 1] = 1  # Bottom border
-                for y in range(text_height):
-                    dst_y = text_area_y + y
-                    if dst_y < display_height:
-                        if text_area_x < display_width:
-                            screen_bitmap[text_area_x, dst_y] = 1  # Left border
-                        if text_area_x + text_width - 1 < display_width:
-                            screen_bitmap[text_area_x + text_width - 1, dst_y] = 1  # Right border
+
+        # Keep any rows below the text band explicitly white to avoid artifacts.
+        bottom_start = min(display_height, text_area_y + text_height)
+        for y in range(bottom_start, display_height):
+            for x in range(display_width):
+                screen_bitmap[x, y] = 0
         
         print(f"Screen bitmap size: {screen_bitmap.width}x{screen_bitmap.height}")
         print(f"Display size: {display_width}x{display_height}")
@@ -429,6 +436,8 @@ image_state = {
     "data": bytearray(),
     "last_chunk_time": 0,  # Track when last chunk was received
     "prompt": "",  # Store prompt text for split layout
+    "transfer_id": None,  # Transfer identifier used by rn-ble-test ACK flow
+    "last_progress_sent": -1,  # Last progress % reported to app
 }
 
 
@@ -461,6 +470,14 @@ advertisement.complete_name = BLE_DEVICE_NAME
 # advertisement.short_name = "Fausto"
 
 ble_log(f"BLE initialized, ready to advertise as {BLE_DEVICE_NAME}")
+
+
+def send_uart_json(payload):
+    """Send newline-delimited JSON to the BLE UART TX characteristic."""
+    try:
+        uart.write((json.dumps(payload) + "\n").encode("utf-8"))
+    except Exception as e:
+        print("UART JSON write failed:", repr(e), payload)
 
 while True:
     ble_log("WAITING for connection")
@@ -533,12 +550,14 @@ while True:
                 is_new_command = False
                 try:
                     test_str = raw.decode("utf-8").strip()
-                    if test_str.startswith("{") and "cmd" in test_str:
+                    if test_str.startswith("{") and ('"cmd"' in test_str or '"t"' in test_str):
                         print("Detected new command while receiving - resetting state")
                         image_state["receiving"] = False
                         image_state["data"] = bytearray()
                         image_state["prompt"] = ""
+                        image_state["transfer_id"] = None
                         image_state["last_chunk_time"] = 0
+                        image_state["last_progress_sent"] = -1
                         is_new_command = True
                         # Fall through to JSON processing below
                 except:
@@ -556,7 +575,9 @@ while True:
                                 image_state["receiving"] = False
                                 image_state["data"] = bytearray()
                                 image_state["prompt"] = ""
+                                image_state["transfer_id"] = None
                                 image_state["last_chunk_time"] = 0
+                                image_state["last_progress_sent"] = -1
                                 set_text("Timeout!", 0xFF0000)
                                 continue
                         
@@ -576,31 +597,72 @@ while True:
                         progress = (len(image_state["data"]) * 100) // image_state["expected_len"] if image_state["expected_len"] > 0 else 0
                         if progress % 10 == 0 or len(image_state["data"]) >= image_state["expected_len"]:
                             set_text(f"Receiving: {progress}%", 0xFFFF00)
+                        if image_state["transfer_id"] and progress != image_state["last_progress_sent"] and progress % 10 == 0:
+                            send_uart_json({
+                                "t": "prog",
+                                "id": image_state["transfer_id"],
+                                "pct": progress,
+                                "rx": len(image_state["data"]),
+                            })
+                            image_state["last_progress_sent"] = progress
                         
                         # Check if complete
                         if len(image_state["data"]) >= image_state["expected_len"]:
                             print("Image complete! Rendering...")
                             # Truncate to expected length
                             image_state["data"] = image_state["data"][:image_state["expected_len"]]
+                            # Send completion ACK before the long e-ink refresh so the app
+                            # does not timeout while the panel is physically updating.
+                            if image_state["transfer_id"]:
+                                send_uart_json({
+                                    "t": "ack",
+                                    "id": image_state["transfer_id"],
+                                    "st": "rendering",
+                                    "ok": 1,
+                                })
                             # Render image to display with prompt text
-                            render_image(
-                                image_state["data"],
-                                image_state["width"],
-                                image_state["height"],
-                                image_state["prompt"]
-                            )
+                            render_ok = True
+                            try:
+                                render_image(
+                                    image_state["data"],
+                                    image_state["width"],
+                                    image_state["height"],
+                                    image_state["prompt"]
+                                )
+                            except Exception as render_err:
+                                render_ok = False
+                                print("Render exception after image complete:", render_err)
+
+                            if image_state["transfer_id"] and not render_ok:
+                                send_uart_json({
+                                    "t": "ack",
+                                    "id": image_state["transfer_id"],
+                                    "st": "render_error",
+                                    "ok": 0,
+                                })
                             # Reset state
                             image_state["receiving"] = False
                             image_state["data"] = bytearray()
                             image_state["prompt"] = ""
+                            image_state["transfer_id"] = None
                             image_state["last_chunk_time"] = 0
+                            image_state["last_progress_sent"] = -1
                     except Exception as e:
                         print("Image decode error:", e)
                         print(f"Error type: {type(e).__name__}")
+                        if image_state["transfer_id"]:
+                            send_uart_json({
+                                "t": "ack",
+                                "id": image_state["transfer_id"],
+                                "st": "decode_error",
+                                "ok": 0,
+                            })
                         image_state["receiving"] = False
                         image_state["data"] = bytearray()
                         image_state["prompt"] = ""
+                        image_state["transfer_id"] = None
                         image_state["last_chunk_time"] = 0
+                        image_state["last_progress_sent"] = -1
                         set_text("Image error!", 0xFF0000)
                     continue
 
@@ -624,8 +686,10 @@ while True:
             try:
                 msg = json.loads(s)
                 
-                # Check for image command
-                if msg.get("cmd") == "image_start":
+                # Check for image command: support both legacy and rn-ble-test compact protocol.
+                is_legacy_start = msg.get("cmd") == "image_start"
+                is_compact_start = msg.get("t") == "img"
+                if is_legacy_start or is_compact_start:
                     # ALWAYS reset state when receiving a new image_start
                     # This handles cases where previous transfer was incomplete
                     if image_state["receiving"]:
@@ -636,14 +700,24 @@ while True:
                     image_state["width"] = msg.get("w", 0)
                     image_state["height"] = msg.get("h", 0)
                     image_state["expected_len"] = msg.get("len", 0)
-                    image_state["prompt"] = msg.get("prompt", "")
+                    image_state["prompt"] = msg.get("p", "") if is_compact_start else msg.get("prompt", "")
+                    image_state["transfer_id"] = msg.get("id", None) if is_compact_start else None
                     image_state["data"] = bytearray()  # Fresh buffer
                     image_state["last_chunk_time"] = time.monotonic()
+                    image_state["last_progress_sent"] = -1
                     
                     # Validate the incoming parameters
                     if image_state["expected_len"] <= 0 or image_state["width"] <= 0 or image_state["height"] <= 0:
                         print(f"Invalid image params: w={image_state['width']}, h={image_state['height']}, len={image_state['expected_len']}")
+                        if image_state["transfer_id"]:
+                            send_uart_json({
+                                "t": "ack",
+                                "id": image_state["transfer_id"],
+                                "st": "bad_params",
+                                "ok": 0,
+                            })
                         image_state["receiving"] = False
+                        image_state["transfer_id"] = None
                         set_text("Invalid image!", 0xFF0000)
                         continue
                     
@@ -652,8 +726,22 @@ while True:
                         print(f"Prompt: {image_state['prompt'][:50]}...")
                     print(f"Waiting for {image_state['expected_len']} bytes...")
                     set_text("Receiving...", 0xFFFF00)
+                    if image_state["transfer_id"]:
+                        send_uart_json({
+                            "t": "ack",
+                            "id": image_state["transfer_id"],
+                            "st": "start",
+                            "ok": 1,
+                            "rx": 0,
+                            "len": image_state["expected_len"],
+                        })
                     continue
                 
+                if msg.get("t") == "bat":
+                    # Minimal telemetry response so rn-ble-test fetchBatteryData can clear loading.
+                    send_uart_json({"t": "bat", "mv": 0, "pct": 0, "tmp": None, "src": "unsupported"})
+                    continue
+
                 # Regular text message
                 txt = msg.get("text") or ""
                 col = parse_color(msg.get("color"), 0x00FFFF)
@@ -676,7 +764,9 @@ while True:
     image_state["receiving"] = False
     image_state["data"] = bytearray()
     image_state["prompt"] = ""
+    image_state["transfer_id"] = None
     image_state["last_chunk_time"] = 0
+    image_state["last_progress_sent"] = -1
 
     # Always try to stop advertising to ensure a clean state
     try:

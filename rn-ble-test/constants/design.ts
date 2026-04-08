@@ -1,6 +1,8 @@
 import { Platform } from "react-native";
 
+// Glimpse Brand Colors
 export const colors = {
+  // Core palette
   bg: "#FAFAFA",
   card: "#FFFFFF",
   text: "#1A1A1A",
@@ -11,6 +13,28 @@ export const colors = {
   border: "#E5E5E5",
   warning: "#F59E0B",
   error: "#EF4444",
+
+  // Glimpse brand accent (subtle electric blue glow)
+  glimpse: "#3B82F6",
+  glimpseLight: "#60A5FA",
+  glimpseGlow: "rgba(59, 130, 246, 0.3)",
+
+  // Semantic tokens
+  info: "#3B82F6",
+  infoBg: "#EFF6FF",
+  successBg: "#ECFDF5",
+  warningBg: "#FFFBEB",
+  errorBg: "#FEF2F2",
+
+  // Transfer state colors
+  charging: "#F59E0B",
+  sending: "#3B82F6",
+  confirmed: "#10B981",
+
+  // Battery indicator
+  batteryHigh: "#10B981",
+  batteryMedium: "#F59E0B",
+  batteryLow: "#EF4444",
 };
 
 export const spacing = {
@@ -71,6 +95,16 @@ export const typography = {
     fontFamily: fonts.regular,
     color: colors.textMuted,
   },
+  chip: {
+    fontSize: 12,
+    fontFamily: fonts.medium,
+    color: colors.text,
+  },
+  badge: {
+    fontSize: 11,
+    fontFamily: fonts.semibold,
+    color: colors.card,
+  },
 };
 
 export const shadows = {
@@ -95,6 +129,28 @@ export const shadows = {
     shadowRadius: 16,
     elevation: 6,
   },
+  glow: {
+    shadowColor: colors.glimpse,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.4,
+    shadowRadius: 12,
+    elevation: 0,
+  },
+};
+
+// Animation timing
+export const timing = {
+  quick: 150,
+  normal: 300,
+  slow: 500,
+  verySlow: 800,
+};
+
+// Easing curves
+export const easing = {
+  standard: "ease-out",
+  bounce: "spring",
+  linear: "linear",
 };
 
 // Sticky note colors for variety
@@ -106,3 +162,28 @@ export const stickyNoteColors = [
   "#E0E7FF", // Indigo
   "#FEE2E2", // Red
 ];
+
+// Status colors helper
+export function getBatteryColor(pct: number): string {
+  if (pct > 50) return colors.batteryHigh;
+  if (pct > 20) return colors.batteryMedium;
+  return colors.batteryLow;
+}
+
+export function getTransferColor(stage: string): string {
+  switch (stage) {
+    case "preparing":
+      return colors.textMuted;
+    case "sending_start":
+    case "sending_chunks":
+      return colors.sending;
+    case "waiting_ack":
+      return colors.glimpse;
+    case "done":
+      return colors.confirmed;
+    case "error":
+      return colors.error;
+    default:
+      return colors.textMuted;
+  }
+}

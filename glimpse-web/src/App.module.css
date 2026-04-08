@@ -1,0 +1,39 @@
+.canvasWrap {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.canvasDisabled {
+  pointer-events: none;
+}
+
+.canvasWrap canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Sections sit above canvas (z-index 2+) and handle their own pointer events.
+   main itself is transparent to pointer events so the canvas can receive drags
+   in the "empty" areas (right side of hero, left side of scroll story). */
+.main {
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.mainHidden {
+  opacity: 0;
+  transform: scale(0.97);
+  pointer-events: none;
+}
+
+.divider {
+  position: relative;
+  z-index: 10;
+  height: 1px;
+  margin: 0 6vw;
+  background: linear-gradient(to right, transparent, var(--border), transparent);
+}

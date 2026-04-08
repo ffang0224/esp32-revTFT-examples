@@ -1,0 +1,64 @@
+.section {
+  position: relative;
+  z-index: 10;
+  background: var(--bg-mid);
+  padding: 9rem 6vw;
+  pointer-events: none;
+}
+
+.eyebrow {
+  font-size: 0.68rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+  text-align: center;
+  margin-bottom: 5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3rem;
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.card {
+  border-top: 1px solid var(--border);
+  padding-top: 2rem;
+}
+
+.cardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.2rem;
+}
+
+.stepNum {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.8rem;
+  font-weight: 700;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(41, 151, 255, 0.25);
+}
+
+.icon {
+  font-size: 1.3rem;
+  opacity: 0.55;
+}
+
+.title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--accent);
+  margin-bottom: 0.7rem;
+}
+
+.body {
+  font-size: 0.82rem;
+  line-height: 1.85;
+  color: var(--text-muted);
+}

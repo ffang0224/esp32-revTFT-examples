@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import * as SecureStore from "expo-secure-store";
 import Constants from "expo-constants";
 import { useBle } from "../contexts";
+import { BatteryIndicator, StatusChip } from "../components";
 import { colors, spacing, borderRadius, typography, shadows } from "../constants/design";
 import { Device } from "react-native-ble-plx";
 
@@ -34,6 +35,9 @@ export default function SettingsScreen() {
     connectToDevice,
     disconnect,
     rssi,
+    batteryData,
+    isFetchingBattery,
+    fetchBatteryData,
   } = useBle();
 
   const [apiKey, setApiKey] = useState("");
@@ -176,21 +180,48 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Badge Connection</Text>
 
           {connectedDevice ? (
-            <View style={styles.connectedCard}>
-              <View style={styles.connectedInfo}>
-                <View style={styles.connectedDot} />
-                <View>
-                  <Text style={styles.connectedName}>
-                    {connectedDevice.name || "Badge"}
-                  </Text>
-                  {rssi !== null && (
-                    <Text style={styles.connectedRssi}>Signal: {rssi}dBm</Text>
-                  )}
+            <View style={styles.connectedSection}>
+              <View style={styles.connectedCard}>
+                <View style={styles.connectedInfo}>
+                  <View style={styles.connectedDot} />
+                  <View>
+                    <Text style={styles.connectedName}>
+                      {connectedDevice.name || "Badge"}
+                    </Text>
+                    {rssi !== null && (
+                      <Text style={styles.connectedRssi}>Signal: {rssi}dBm</Text>
+                    )}
+                  </View>
                 </View>
+                <TouchableOpacity style={styles.disconnectButton} onPress={disconnect}>
+                  <Text style={styles.disconnectText}>Disconnect</Text>
+                </TouchableOpacity>
               </View>
-              <TouchableOpacity style={styles.disconnectButton} onPress={disconnect}>
-                <Text style={styles.disconnectText}>Disconnect</Text>
-              </TouchableOpacity>
+
+              {/* Battery Information */}
+              {batteryData ? (
+                <View style={styles.batteryCard}>
+                  <BatteryIndicator
+                    percentage={batteryData.pct}
+                    voltage={batteryData.mv}
+                    temperature={batteryData.tmp}
+                    onPress={fetchBatteryData}
+                    showDetails
+                  />
+                </View>
+              ) : (
+                <TouchableOpacity
+                  style={styles.fetchBatteryButton}
+                  onPress={fetchBatteryData}
+                  disabled={isFetchingBattery}
+                >
+                  {isFetchingBattery ? (
+                    <ActivityIndicator size="small" color={colors.accent} />
+                  ) : (
+                    <Text style={styles.fetchBatteryText}>Check Battery</Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           ) : (
             <>
@@ -317,6 +348,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.bg,
   },
+  connectedSection: {
+    gap: spacing.md,
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -399,6 +433,24 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "500",
     color: colors.text,
+  },
+  batteryCard: {
+    backgroundColor: colors.accentLight,
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+  },
+  fetchBatteryButton: {
+    backgroundColor: colors.infoBg,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.info,
+  },
+  fetchBatteryText: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: colors.info,
   },
   warningCard: {
     backgroundColor: "#FEF3C7",

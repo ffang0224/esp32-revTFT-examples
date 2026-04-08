@@ -7,6 +7,12 @@
   align-items: center;
   opacity: 0;
   pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+
+.open {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .close {
@@ -18,7 +24,7 @@
   border-radius: 50%;
   width: 2.4rem;
   height: 2.4rem;
-  color: var(--text-dim);
+  color: var(--text);
   font-size: 1.3rem;
   line-height: 1;
   cursor: none;
@@ -52,7 +58,7 @@
 .phone {
   width: 280px;
   min-height: 520px;
-  background: #111;
+  background: #0f0f11;
   border-radius: 40px;
   border: 1px solid var(--border);
   display: flex;
@@ -84,12 +90,13 @@
   font-size: 0.65rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
-  color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .input {
   flex: 1;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.08);
   border: 1px solid var(--border);
   border-radius: 12px;
   padding: 0.9rem 1rem;
@@ -103,12 +110,17 @@
   cursor: none;
 }
 
+.input::placeholder {
+  color: var(--text-dim);
+  opacity: 1;
+}
+
 .input:focus {
   border-color: var(--accent-soft);
 }
 
 .input:disabled {
-  opacity: 0.5;
+  opacity: 0.72;
 }
 
 .sendBtn {
@@ -131,12 +143,14 @@
 }
 
 .sendBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.65;
+  color: var(--text-dim);
+  border-color: var(--border);
 }
 
 .sendBtn.sending {
   border-color: var(--accent-soft);
-  color: var(--accent-soft);
+  color: var(--text);
 }
 
 .sendBtn.received {
@@ -168,5 +182,5 @@
   font-size: 0.62rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-dim);
 }

@@ -17,6 +17,7 @@ import {
   Device,
   Characteristic,
   BleError,
+  Subscription,
 } from "react-native-ble-plx";
 import { Buffer } from "buffer";
 import * as SecureStore from "expo-secure-store";
@@ -27,6 +28,7 @@ import * as UPNG from "upng-js";
 // Constants
 const UART_SERVICE_UUID = "6E400001-B5A3-F393-E0A9-E50E24DCCA9E";
 const UART_RX_UUID = "6E400002-B5A3-F393-E0A9-E50E24DCCA9E";
+const UART_TX_UUID = "6E400003-B5A3-F393-E0A9-E50E24DCCA9E";
 const CONNECTED_DEVICE_STORAGE_KEY = "last_connected_device_id";
 const BADGE_NAME_PREFIX = "fausto";
 const MAX_CONNECTION_RETRIES = 3;
@@ -35,6 +37,35 @@ const AUTOCONNECT_SCAN_TIMEOUT = 10000;
 const MANUAL_SCAN_TIMEOUT = 8000;
 const RETRY_DELAY_MS = 2000;
 const CONNECTION_TIMEOUT = 15000;
+
+// Transfer states
+type TransferStage =
+  | "idle"
+  | "preparing"
+  | "sending_start"
+  | "sending_chunks"
+  | "waiting_ack"
+  | "done"
+  | "error";
+
+interface TransferState {
+  stage: TransferStage;
+  transferId: string | null;
+  bytesSent: number;
+  bytesTotal: number;
+  chunkIndex: number;
+  chunkCount: number;
+  progress: number;
+  error: string | null;
+}
+
+interface BatteryData {
+  mv: number;
+  pct: number;
+  tmp: number | null;
+  src: string;
+  timestamp: number;
+}
 
 const getDeviceName = (device: Device) =>
   (device.name || (device as any).localName || "").trim();
@@ -70,16 +101,36 @@ interface BleContextType {
   connectionRetryCount: number;
   rssi: number | null;
   devices: Record<string, Device>;
-  
+
+  // Transfer state
+  transferState: TransferState;
+
+  // Battery state
+  batteryData: BatteryData | null;
+  isFetchingBattery: boolean;
+
   // Actions
   startScan: () => Promise<void>;
   connectToDevice: (device: Device) => Promise<void>;
   disconnect: () => Promise<void>;
   autoConnect: (retryCount?: number) => Promise<void>;
-  
+
   // Image sending
-  sendImageToBadge: (imageUrl: string, prophecyText: string) => Promise<void>;
+  sendImageToBadge: (imageUrl: string, prophecyText: string) => Promise<boolean>;
   isSendingImage: boolean;
+  prepareImageBuffer: (imageUrl: string) => Promise<{
+    binaryData: Uint8Array;
+    width: number;
+    height: number;
+  } | null>;
+  cancelTransfer: () => void;
+
+  // Battery
+  fetchBatteryData: () => Promise<void>;
+
+  // Legacy compatibility
+  imageBuffer: Uint8Array | null;
+  imageDimensions: { width: number; height: number } | null;
 }
 
 const BleContext = createContext<BleContextType | null>(null);
@@ -92,11 +143,34 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const [connectedDevice, setConnectedDevice] = useState<Device | null>(null);
   const [lastKnownDeviceId, setLastKnownDeviceId] = useState<string | null>(null);
   const [uartRxChar, setUartRxChar] = useState<Characteristic | null>(null);
+  const [uartTxChar, setUartTxChar] = useState<Characteristic | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [autoconnectFailed, setAutoconnectFailed] = useState(false);
   const [connectionRetryCount, setConnectionRetryCount] = useState(0);
   const [rssi, setRssi] = useState<number | null>(null);
   const [isSendingImage, setIsSendingImage] = useState(false);
+
+  // Transfer state
+  const [transferState, setTransferState] = useState<TransferState>({
+    stage: "idle",
+    transferId: null,
+    bytesSent: 0,
+    bytesTotal: 0,
+    chunkIndex: 0,
+    chunkCount: 0,
+    progress: 0,
+    error: null,
+  });
+
+  // Battery state
+  const [batteryData, setBatteryData] = useState<BatteryData | null>(null);
+  const [isFetchingBattery, setIsFetchingBattery] = useState(false);
+
+  // Legacy compatibility
+  const [imageBuffer, setImageBuffer] = useState<Uint8Array | null>(null);
+  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number } | null>(null);
+
+  // Refs
   const autoConnectRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanReasonRef = useRef<"autoconnect" | "manual" | null>(null);
@@ -104,6 +178,11 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
   const autoconnectRunIdRef = useRef(0);
   const manualDisconnectRef = useRef(false);
   const autoConnectRef = useRef<(retryCount?: number) => Promise<void>>(async () => {});
+  const txSubscriptionRef = useRef<Subscription | null>(null);
+  const pendingAckResolveRef = useRef<((value: { stage: string; ok: boolean; extra?: any }) => void) | null>(null);
+  const transferTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentTransferIdRef = useRef<string | null>(null);
+  const receiveBufferRef = useRef<string>("");
 
   const clearAutoConnectRetryTimer = useCallback(() => {
     if (autoConnectRetryTimerRef.current) {
@@ -116,6 +195,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     if (scanTimeoutRef.current) {
       clearTimeout(scanTimeoutRef.current);
       scanTimeoutRef.current = null;
+    }
+  }, []);
+
+  const clearTransferTimeout = useCallback(() => {
+    if (transferTimeoutRef.current) {
+      clearTimeout(transferTimeoutRef.current);
+      transferTimeoutRef.current = null;
     }
   }, []);
 
@@ -135,6 +221,54 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     },
     [clearScanTimeout]
   );
+
+  // Parse incoming BLE messages
+  const parseIncomingData = useCallback((data: string) => {
+    receiveBufferRef.current += data;
+    const lines = receiveBufferRef.current.split("\n");
+    receiveBufferRef.current = lines.pop() || ""; // Keep incomplete line in buffer
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const msg = JSON.parse(line);
+        console.log(`[BLE RX] ${line.substring(0, 100)}`);
+
+        // Handle ACK messages
+        if (msg.t === "ack" && msg.id) {
+          const { id, st, ok, ...extra } = msg;
+          if (pendingAckResolveRef.current && id === currentTransferIdRef.current) {
+            pendingAckResolveRef.current({ stage: st, ok: ok === 1 || ok === true, extra });
+          }
+        }
+
+        // Handle progress messages
+        if (msg.t === "prog" && msg.id === currentTransferIdRef.current) {
+          setTransferState((prev) => ({
+            ...prev,
+            progress: msg.pct || 0,
+            bytesSent: msg.rx || prev.bytesSent,
+          }));
+        }
+
+        // Handle battery telemetry
+        if (msg.t === "bat") {
+          const batteryInfo: BatteryData = {
+            mv: msg.mv || 0,
+            pct: msg.pct || 0,
+            tmp: msg.tmp || null,
+            src: msg.src || "unknown",
+            timestamp: Date.now(),
+          };
+          setBatteryData(batteryInfo);
+          setIsFetchingBattery(false);
+        }
+      } catch (e) {
+        // Not valid JSON, ignore or log
+        console.log(`[BLE RX] raw: ${line.substring(0, 100)}`);
+      }
+    }
+  }, []);
 
   const handleDeviceConnection = useCallback(
     async (device: Device, isRetry: boolean = false) => {
@@ -169,10 +303,18 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         await device.discoverAllServicesAndCharacteristics();
         const chars = await device.characteristicsForService(UART_SERVICE_UUID);
 
+        // Find RX characteristic (write)
         const rx = chars.find(
           (c) =>
             c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
             (c.isWritableWithoutResponse || c.isWritableWithResponse)
+        );
+
+        // Find TX characteristic (notify)
+        const tx = chars.find(
+          (c) =>
+            c.uuid.toLowerCase() === UART_TX_UUID.toLowerCase() &&
+            c.isNotifiable
         );
 
         if (!rx) {
@@ -185,6 +327,44 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         setAutoconnectFailed(false);
         setConnectionRetryCount(0);
         manualDisconnectRef.current = false;
+
+        // Set up TX notification subscription
+        if (tx) {
+          setUartTxChar(tx);
+          try {
+            if (txSubscriptionRef.current) {
+              txSubscriptionRef.current.remove();
+            }
+            txSubscriptionRef.current = manager.monitorCharacteristicForDevice(
+              device.id,
+              UART_SERVICE_UUID,
+              UART_TX_UUID,
+              (error, characteristic) => {
+              if (error) {
+                const message = error.message || "Unknown monitor error";
+                const isExpectedDisconnect =
+                  message.toLowerCase().includes("cancelled") ||
+                  message.toLowerCase().includes("disconnected");
+                if (!isExpectedDisconnect) {
+                  console.log("TX monitor error:", message, (error as any).reason || "");
+                }
+                return;
+              }
+              if (characteristic?.value) {
+                try {
+                  const decoded = Buffer.from(characteristic.value, "base64").toString("utf-8");
+                  parseIncomingData(decoded);
+                } catch (e) {
+                  console.log("TX decode error:", e);
+                }
+              }
+            }
+            );
+            console.log("TX notification subscribed");
+          } catch (e) {
+            console.log("Failed to subscribe to TX notifications:", e);
+          }
+        }
 
         try {
           await SecureStore.setItemAsync(CONNECTED_DEVICE_STORAGE_KEY, device.id);
@@ -203,7 +383,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         throw e;
       }
     },
-    []
+    [parseIncomingData]
   );
 
   const autoConnect = useCallback(
@@ -405,12 +585,17 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
       autoconnectRunIdRef.current += 1;
       clearAutoConnectRetryTimer();
       clearScanTimeout();
+      clearTransferTimeout();
+      if (txSubscriptionRef.current) {
+        txSubscriptionRef.current.remove();
+        txSubscriptionRef.current = null;
+      }
       try {
         manager.stopDeviceScan();
       } catch {}
       manager.destroy();
     };
-  }, [clearAutoConnectRetryTimer, clearScanTimeout]);
+  }, [clearAutoConnectRetryTimer, clearScanTimeout, clearTransferTimeout]);
 
   useEffect(() => {
     if (!lastKnownDeviceId) return;
@@ -422,8 +607,13 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         stopScan("device-disconnected");
         setConnectedDevice(null);
         setUartRxChar(null);
+        setUartTxChar(null);
         setRssi(null);
         setIsConnecting(false);
+        if (txSubscriptionRef.current) {
+          txSubscriptionRef.current.remove();
+          txSubscriptionRef.current = null;
+        }
 
         if (manualDisconnectRef.current) {
           manualDisconnectRef.current = false;
@@ -548,6 +738,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setIsConnecting(true);
     stopScan("manual-connect");
     setUartRxChar(null);
+    setUartTxChar(null);
 
     try {
       console.log(`[BLE][connect] manual -> ${device.id}`);
@@ -588,41 +779,37 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
     setIsConnecting(false);
     setConnectedDevice(null);
     setUartRxChar(null);
+    setUartTxChar(null);
     setRssi(null);
+    if (txSubscriptionRef.current) {
+      txSubscriptionRef.current.remove();
+      txSubscriptionRef.current = null;
+    }
   };
 
-  const sendImageToBadge = async (imageUrl: string, prophecyText: string) => {
-    if (!connectedDevice) {
-      Alert.alert("Not Connected", "Please connect to your badge first");
-      return;
-    }
+  const cancelTransfer = useCallback(() => {
+    clearTransferTimeout();
+    pendingAckResolveRef.current = null;
+    currentTransferIdRef.current = null;
+    setTransferState({
+      stage: "idle",
+      transferId: null,
+      bytesSent: 0,
+      bytesTotal: 0,
+      chunkIndex: 0,
+      chunkCount: 0,
+      progress: 0,
+      error: null,
+    });
+    setIsSendingImage(false);
+  }, [clearTransferTimeout]);
 
-    setIsSendingImage(true);
-
+  const prepareImageBuffer = useCallback(async (imageUrl: string): Promise<{
+    binaryData: Uint8Array;
+    width: number;
+    height: number;
+  } | null> => {
     try {
-      if (!connectedDevice.isConnected()) {
-        throw new Error("Device disconnected. Please reconnect.");
-      }
-
-      let char = uartRxChar;
-      if (!char) {
-        console.log("Re-acquiring UART characteristic...");
-        await connectedDevice.discoverAllServicesAndCharacteristics();
-        const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
-        const foundChar = chars.find(
-          (c) =>
-            c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
-            (c.isWritableWithoutResponse || c.isWritableWithResponse)
-        );
-        if (!foundChar) {
-          throw new Error("UART RX characteristic not found");
-        }
-        char = foundChar;
-        setUartRxChar(foundChar);
-      }
-
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       const squareSize = 122;
       const manipResult = await manipulateAsync(
         imageUrl,
@@ -650,8 +837,7 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         grayscale[i] = r * 0.2126 + g * 0.7152 + b * 0.0722;
       }
 
-      let min = 255,
-        max = 0;
+      let min = 255, max = 0;
       for (let i = 0; i < grayscale.length; i++) {
         if (grayscale[i] < min) min = grayscale[i];
         if (grayscale[i] > max) max = grayscale[i];
@@ -700,27 +886,137 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
+      setImageBuffer(binaryData);
+      setImageDimensions({ width, height });
+
+      return { binaryData, width, height };
+    } catch (e: any) {
+      console.error("Prepare image error:", e);
+      return null;
+    }
+  }, []);
+
+  const sendImageToBadge = useCallback(async (imageUrl: string, prophecyText: string): Promise<boolean> => {
+    if (!connectedDevice) {
+      Alert.alert("Not Connected", "Please connect to your badge first");
+      return false;
+    }
+
+    setIsSendingImage(true);
+    clearTransferTimeout();
+
+    // Generate unique transfer ID
+    const transferId = `tx${Date.now().toString(36).slice(-6)}`;
+    currentTransferIdRef.current = transferId;
+
+    try {
+      // Check connection
+      const isDeviceConnected = await connectedDevice.isConnected();
+      if (!isDeviceConnected) {
+        throw new Error("Device disconnected. Please reconnect.");
+      }
+
+      // Get or re-acquire characteristic
+      let char = uartRxChar;
+      if (!char) {
+        console.log("Re-acquiring UART characteristic...");
+        await connectedDevice.discoverAllServicesAndCharacteristics();
+        const chars = await connectedDevice.characteristicsForService(UART_SERVICE_UUID);
+        const foundChar = chars.find(
+          (c) =>
+            c.uuid.toLowerCase() === UART_RX_UUID.toLowerCase() &&
+            (c.isWritableWithoutResponse || c.isWritableWithResponse)
+        );
+        if (!foundChar) {
+          throw new Error("UART RX characteristic not found");
+        }
+        char = foundChar;
+        setUartRxChar(foundChar);
+      }
+
+      // Prepare image buffer
+      setTransferState({
+        stage: "preparing",
+        transferId,
+        bytesSent: 0,
+        bytesTotal: 0,
+        chunkIndex: 0,
+        chunkCount: 0,
+        progress: 0,
+        error: null,
+      });
+
+      const prepared = await prepareImageBuffer(imageUrl);
+      if (!prepared) {
+        throw new Error("Failed to prepare image");
+      }
+
+      const { binaryData, width, height } = prepared;
+      const CHUNK_SIZE = 180;
+      const chunkCount = Math.ceil(binaryData.length / CHUNK_SIZE);
+
+      setTransferState({
+        stage: "sending_start",
+        transferId,
+        bytesSent: 0,
+        bytesTotal: binaryData.length,
+        chunkIndex: 0,
+        chunkCount,
+        progress: 0,
+        error: null,
+      });
+
+      // Send start command with new compact format
       const startCmd =
         JSON.stringify({
-          cmd: "image_start",
+          t: "img",
+          id: transferId,
           w: width,
           h: height,
           len: binaryData.length,
-          prompt: prophecyText.trim(),
+          p: prophecyText.trim(),
         }) + "\n";
 
       if (!char.isWritableWithoutResponse && !char.isWritableWithResponse) {
         throw new Error("Characteristic is no longer writable");
       }
 
+      // Set up ACK waiter
+      const startAckPromise = new Promise<{ stage: string; ok: boolean }>((resolve, reject) => {
+        pendingAckResolveRef.current = resolve;
+        transferTimeoutRef.current = setTimeout(() => {
+          pendingAckResolveRef.current = null;
+          reject(new Error("Start ACK timeout"));
+        }, 5000);
+      });
+
       await char.writeWithoutResponse(Buffer.from(startCmd).toString("base64"));
       await new Promise((resolve) => setTimeout(resolve, 200));
 
-      const CHUNK_SIZE = 180;
+      // Wait for start ACK
+      const startAck = await startAckPromise;
+      if (!startAck.ok) {
+        throw new Error(`Start rejected: ${startAck.stage}`);
+      }
+
+      // Send chunks
+      setTransferState({
+        stage: "sending_chunks",
+        transferId,
+        bytesSent: 0,
+        bytesTotal: binaryData.length,
+        chunkIndex: 0,
+        chunkCount,
+        progress: 0,
+        error: null,
+      });
+
       let offset = 0;
+      let chunkIndex = 0;
 
       while (offset < binaryData.length) {
-        if (!connectedDevice.isConnected()) {
+        const isStillConnected = await connectedDevice.isConnected();
+        if (!isStillConnected) {
           throw new Error("Device disconnected during transmission");
         }
 
@@ -753,18 +1049,100 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         }
 
         offset += CHUNK_SIZE;
+        chunkIndex++;
+
+        setTransferState((prev) => ({
+          ...prev,
+          bytesSent: Math.min(offset, binaryData.length),
+          chunkIndex,
+          progress: Math.round((chunkIndex / chunkCount) * 50), // 0-50% for sending
+        }));
+
         await new Promise((resolve) => setTimeout(resolve, 30));
       }
 
-      console.log(`Image sent completely: ${width}x${height}`);
-      Alert.alert("Success", "Prophecy sent to badge!");
+      // Wait for completion ACK
+      setTransferState((prev) => ({
+        ...prev,
+        stage: "waiting_ack",
+        progress: 60,
+      }));
+
+      const doneAckPromise = new Promise<{ stage: string; ok: boolean }>((resolve, reject) => {
+        pendingAckResolveRef.current = resolve;
+        transferTimeoutRef.current = setTimeout(() => {
+          pendingAckResolveRef.current = null;
+          reject(new Error("Completion ACK timeout"));
+        }, 15000); // E-ink refresh takes time
+      });
+
+      const doneAck = await doneAckPromise;
+
+      if (doneAck.ok) {
+        setTransferState({
+          stage: "done",
+          transferId,
+          bytesSent: binaryData.length,
+          bytesTotal: binaryData.length,
+          chunkIndex,
+          chunkCount,
+          progress: 100,
+          error: null,
+        });
+        return true;
+      } else {
+        throw new Error(`Transfer failed: ${doneAck.stage}`);
+      }
     } catch (e: any) {
       console.error("Send Image Error:", e);
-      Alert.alert("Error", "Failed to send image: " + e.message);
+      setTransferState((prev) => ({
+        ...prev,
+        stage: "error",
+        error: e.message,
+        progress: 0,
+      }));
+      return false;
     } finally {
+      clearTransferTimeout();
+      pendingAckResolveRef.current = null;
       setIsSendingImage(false);
     }
-  };
+  }, [connectedDevice, uartRxChar, prepareImageBuffer, clearTransferTimeout]);
+
+  const fetchBatteryData = useCallback(async () => {
+    if (!connectedDevice || !uartRxChar) {
+      Alert.alert("Not Connected", "Please connect to your badge first");
+      return;
+    }
+
+    setIsFetchingBattery(true);
+
+    try {
+      const isDeviceConnected = await connectedDevice.isConnected();
+      if (!isDeviceConnected) {
+        throw new Error("Device disconnected");
+      }
+
+      const cmd = JSON.stringify({ t: "bat" }) + "\n";
+      await uartRxChar.writeWithoutResponse(Buffer.from(cmd).toString("base64"));
+
+      // If nothing comes back, stop the spinner after a short timeout.
+      setTimeout(() => {
+        setIsFetchingBattery((prev) => (prev ? false : prev));
+      }, 4000);
+    } catch (e: any) {
+      console.error("Fetch battery error:", e);
+      Alert.alert("Error", e.message || "Failed to fetch battery data");
+      setIsFetchingBattery(false);
+    }
+  }, [connectedDevice, uartRxChar]);
+
+  // Auto-fetch battery once on successful connect
+  useEffect(() => {
+    if (connectedDevice && uartRxChar && !batteryData) {
+      fetchBatteryData();
+    }
+  }, [connectedDevice, uartRxChar, batteryData, fetchBatteryData]);
 
   return (
     <BleContext.Provider
@@ -776,12 +1154,20 @@ export function BleProvider({ children }: { children: React.ReactNode }) {
         connectionRetryCount,
         rssi,
         devices,
+        transferState,
+        batteryData,
+        isFetchingBattery,
         startScan,
         connectToDevice,
         disconnect,
         autoConnect,
         sendImageToBadge,
         isSendingImage,
+        prepareImageBuffer,
+        cancelTransfer,
+        fetchBatteryData,
+        imageBuffer,
+        imageDimensions,
       }}
     >
       {children}

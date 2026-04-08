@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { scrollState } from './canvas/GlimpseModel'
+import { scrollState } from './canvas/scrollState'
 import { DEMO_IMAGES } from './demoImages'
 import styles from './DemoOverlay.module.css'
 
-export default function DemoOverlay({ overlayRef, onClose }) {
+export default function DemoOverlay({ isOpen, onClose }) {
   const [status, setStatus] = useState('idle') // 'idle' | 'sending' | 'received'
   const [prompt, setPrompt] = useState('')
   const t1 = useRef(null)
@@ -29,6 +29,8 @@ export default function DemoOverlay({ overlayRef, onClose }) {
 
     t1.current = setTimeout(() => {
       const idx = Math.floor(Math.random() * DEMO_IMAGES.length)
+      scrollState.screenImage = null
+      scrollState.screenVisible = true
       scrollState.screenIndex = idx
       setStatus('received')
 
@@ -45,7 +47,7 @@ export default function DemoOverlay({ overlayRef, onClose }) {
   }
 
   return (
-    <div ref={overlayRef} className={styles.overlay}>
+    <div className={`${styles.overlay} ${isOpen ? styles.open : ''}`}>
       <button className={styles.close} onClick={handleClose} aria-label="Close demo">×</button>
 
       <div className={styles.left}>
