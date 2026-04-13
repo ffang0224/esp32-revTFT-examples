@@ -99,7 +99,6 @@ export default function App() {
         <Hero />
         <DilemmaStory />
         <ScrollStory />
-        <div className={styles.divider} />
         <HowItWorks />
         <Specs />
         <Footer />
