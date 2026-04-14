@@ -103,6 +103,7 @@ export default function GlimpseModel() {
   const mx = useRef(4.3)
   const mz = useRef(0)
   const mroty = useRef(Math.PI - 0.04)
+  const flashRef = useRef({ phase: 'idle', elapsed: 0, nextUrl: null })
 
   useFrame(({ clock, delta, invalidate }) => {
     if (!groupRef.current) return
@@ -138,6 +139,9 @@ export default function GlimpseModel() {
     }
 
     if (!scrollState.screenVisible) {
+      flashRef.current.phase = 'idle'
+      flashRef.current.elapsed = 0
+      flashRef.current.nextUrl = null
       mat.map = null
       mat.color.copy(blankColor)
       mat.needsUpdate = true
@@ -149,11 +153,30 @@ export default function GlimpseModel() {
     const safeIdx = Math.max(0, Math.min(scrollState.screenIndex, STORY_SCREEN_IMAGES.length - 1))
     const targetUrl = scrollState.screenImage ?? STORY_SCREEN_IMAGES[safeIdx] ?? STORY_SCREEN_IMAGES[0]
 
-    if (currentTexRef.current !== targetUrl) {
-      currentTexRef.current = targetUrl
-      mat.map = textureMap.get(targetUrl) ?? textures[0]
+    const flash = flashRef.current
+
+    if (flash.phase === 'idle' && currentTexRef.current !== targetUrl) {
+      // Start flash: clear screen to white, record target
+      flash.phase = 'flash-in'
+      flash.elapsed = 0
+      flash.nextUrl = targetUrl
+      mat.map = null
       mat.color.set('#ffffff')
       mat.needsUpdate = true
+    }
+
+    if (flash.phase === 'flash-in') {
+      flash.elapsed += delta
+      if (flash.elapsed >= 0.08) {
+        // Peak white reached — swap texture and finish
+        currentTexRef.current = flash.nextUrl
+        mat.map = textureMap.get(flash.nextUrl) ?? textures[0]
+        mat.color.set('#ffffff')
+        mat.needsUpdate = true
+        flash.phase = 'idle'
+        flash.elapsed = 0
+        flash.nextUrl = null
+      }
     }
 
     invalidate()
