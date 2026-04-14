@@ -65,8 +65,8 @@ export default function GlimpseModel() {
       }
     })
     return () => {
-      mat.dispose()
       screenMaterialRef.current = null
+      mat.dispose()
     }
   }, [blankColor, scene])
 
@@ -93,8 +93,8 @@ export default function GlimpseModel() {
     })
 
     return () => {
-      caseMat.dispose()
       caseMaterialRef.current = null
+      caseMat.dispose()
     }
   }, [scene])
 
@@ -113,11 +113,9 @@ export default function GlimpseModel() {
       const opacity = mountOpacityRef.current
       if (caseMaterialRef.current) {
         caseMaterialRef.current.opacity = opacity
-        caseMaterialRef.current.needsUpdate = true
       }
       if (screenMaterialRef.current) {
         screenMaterialRef.current.opacity = opacity
-        screenMaterialRef.current.needsUpdate = true
       }
       invalidate()
     }

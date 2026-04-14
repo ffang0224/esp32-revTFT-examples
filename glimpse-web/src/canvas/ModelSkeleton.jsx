@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import * as THREE from 'three'
 
 export default function ModelSkeleton() {
@@ -11,6 +11,10 @@ export default function ModelSkeleton() {
       }),
     [],
   )
+
+  useEffect(() => {
+    return () => material.dispose()
+  }, [material])
 
   return (
     <mesh
