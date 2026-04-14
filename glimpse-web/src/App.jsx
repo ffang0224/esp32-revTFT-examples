@@ -1,4 +1,4 @@
-import { useEffect, useRef, Suspense, useState } from 'react'
+import { useEffect, useMemo, useRef, Suspense, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import Lenis from 'lenis'
 import gsap from 'gsap'
@@ -6,6 +6,7 @@ import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 import GlimpseModel from './canvas/GlimpseModel'
 import Lights from './canvas/Lights'
+import { Environment, ContactShadows } from '@react-three/drei'
 
 import Nav from './sections/Nav'
 import Hero from './sections/Hero'
@@ -22,10 +23,28 @@ import styles from './App.module.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
+function readSectionDebugFromUrl() {
+  if (typeof window === 'undefined') return null
+  const v = new URLSearchParams(window.location.search).get('debugSections')
+  if (v === '1' || v === 'true' || v === 'yes') return true
+  if (v === '0' || v === 'false' || v === 'no') return false
+  return null
+}
+
 export default function App() {
   const lenisRef   = useRef(null)
   const [navHidden, setNavHidden] = useState(false)
   const [isDemoOpen, setIsDemoOpen] = useState(false)
+  const sectionDebug = useMemo(() => {
+    const fromUrl = readSectionDebugFromUrl()
+    if (fromUrl !== null) return fromUrl
+    return import.meta.env.DEV
+  }, [])
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('section-debug', sectionDebug)
+    return () => document.documentElement.classList.remove('section-debug')
+  }, [sectionDebug])
 
   useEffect(() => {
     const lenis = new Lenis({
@@ -88,6 +107,8 @@ export default function App() {
           }}
         >
           <Lights />
+          <Environment preset="studio" />
+          <ContactShadows position={[0, -1.2, 0]} opacity={0.5} blur={2.5} far={3} />
           <Suspense fallback={null}>
             <GlimpseModel />
           </Suspense>
@@ -97,10 +118,21 @@ export default function App() {
       {/* pointer-events:none on main lets canvas receive drag events in empty areas */}
       <main className={`${styles.main} ${isDemoOpen ? styles.mainHidden : ''}`}>
         <Hero />
+
+        <div className={styles.divider} />
         <DilemmaStory />
+
+        <div className={styles.divider} />
         <ScrollStory />
+
+        <div className={styles.divider} />
+        <p className={styles.sectionMark}>02 — How it works</p>
         <HowItWorks />
+
+        <div className={styles.divider} />
+        <p className={styles.sectionMark}>03 — Specs</p>
         <Specs />
+
         <Footer />
       </main>
 
