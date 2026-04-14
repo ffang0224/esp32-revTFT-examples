@@ -5,6 +5,7 @@ import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 import GlimpseModel from './canvas/GlimpseModel'
+import ModelSkeleton from './canvas/ModelSkeleton'
 import Lights from './canvas/Lights'
 import { Environment, ContactShadows } from '@react-three/drei'
 
@@ -109,7 +110,7 @@ export default function App() {
           <Lights />
           <Environment preset="studio" />
           <ContactShadows position={[0, -1.2, 0]} opacity={0.5} blur={2.5} far={3} />
-          <Suspense fallback={null}>
+          <Suspense fallback={<ModelSkeleton />}>
             <GlimpseModel />
           </Suspense>
         </Canvas>

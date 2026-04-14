@@ -21,6 +21,8 @@ function isCaseEInkScreenMesh(mesh) {
 export default function GlimpseModel() {
   const groupRef = useRef()
   const screenMaterialRef = useRef(null)
+  const caseMaterialRef = useRef(null)
+  const mountOpacityRef = useRef(0)
   const currentTexRef = useRef(STORY_SCREEN_IMAGES[0])
   const blankColor = useMemo(() => new THREE.Color('#efeee8'), [])
 
@@ -46,7 +48,11 @@ export default function GlimpseModel() {
 
   // One shared material for all e-ink surface shards in `case.glb`
   useEffect(() => {
-    const mat = new THREE.MeshBasicMaterial({ color: blankColor.clone() })
+    const mat = new THREE.MeshBasicMaterial({
+      color: blankColor.clone(),
+      transparent: true,
+      opacity: 0,
+    })
     screenMaterialRef.current = mat
     scene.traverse((node) => {
       if (!node.isMesh || !isCaseEInkScreenMesh(node)) return
@@ -70,7 +76,10 @@ export default function GlimpseModel() {
       color: new THREE.Color('#111116'),
       roughness: 0.72,
       metalness: 0.0,
+      transparent: true,
+      opacity: 0,
     })
+    caseMaterialRef.current = caseMat
 
     scene.traverse((node) => {
       if (!node.isMesh || isCaseEInkScreenMesh(node)) return
@@ -85,6 +94,7 @@ export default function GlimpseModel() {
 
     return () => {
       caseMat.dispose()
+      caseMaterialRef.current = null
     }
   }, [scene])
 
@@ -94,8 +104,24 @@ export default function GlimpseModel() {
   const mz = useRef(0)
   const mroty = useRef(Math.PI - 0.04)
 
-  useFrame(({ clock, invalidate }) => {
+  useFrame(({ clock, delta, invalidate }) => {
     if (!groupRef.current) return
+
+    // Fade-in on mount (400ms)
+    if (mountOpacityRef.current < 1) {
+      mountOpacityRef.current = Math.min(1, mountOpacityRef.current + delta / 0.4)
+      const opacity = mountOpacityRef.current
+      if (caseMaterialRef.current) {
+        caseMaterialRef.current.opacity = opacity
+        caseMaterialRef.current.needsUpdate = true
+      }
+      if (screenMaterialRef.current) {
+        screenMaterialRef.current.opacity = opacity
+        screenMaterialRef.current.needsUpdate = true
+      }
+      invalidate()
+    }
+
     const t = clock.getElapsedTime()
 
     mx.current = lerp(mx.current, scrollState.targetX, 0.05)
