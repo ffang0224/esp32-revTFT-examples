@@ -11,7 +11,7 @@ function lerp(a, b, t) {
   return a + (b - a) * t
 }
 
-/** Meshes exported under groups named `e_ink_screen`, `e_ink_screen_1`, … in `case.glb`. */
+/** Meshes exported under groups named `e_ink_screen`, `e_ink_screen_1`, … in `casefinal.glb`. */
 function isCaseEInkScreenMesh(mesh) {
   const name = mesh.name ?? ''
   const parentName = mesh.parent?.name ?? ''
