@@ -21,7 +21,7 @@ function isCaseEInkScreenMesh(mesh) {
 export default function GlimpseModel() {
   const groupRef = useRef()
   const screenMaterialRef = useRef(null)
-  const caseMaterialRef = useRef(null)
+  const allMaterialsRef = useRef([])
   const mountOpacityRef = useRef(0)
   const currentTexRef = useRef(STORY_SCREEN_IMAGES[0])
   const blankColor = useMemo(() => new THREE.Color('#efeee8'), [])
@@ -46,58 +46,113 @@ export default function GlimpseModel() {
     })
   }, [textures])
 
-  // One shared material for all e-ink surface shards in `case.glb`
+  // One consolidated useEffect that assigns all materials in a single scene traversal.
+  // screenMaterialRef is kept separate so the flash/texture logic can address it directly.
+  // allMaterialsRef holds every material created here for the fade-in loop and disposal.
   useEffect(() => {
-    const mat = new THREE.MeshBasicMaterial({
+    // ── e-ink screen ──────────────────────────────────────────────────────────
+    const screenMat = new THREE.MeshBasicMaterial({
       color: blankColor.clone(),
       transparent: true,
       opacity: 0,
     })
-    screenMaterialRef.current = mat
-    scene.traverse((node) => {
-      if (!node.isMesh || !isCaseEInkScreenMesh(node)) return
-      if (Array.isArray(node.material)) {
-        node.material.forEach((m) => m.dispose?.())
-        node.material = mat
-      } else {
-        node.material?.dispose?.()
-        node.material = mat
-      }
-    })
-    return () => {
-      screenMaterialRef.current = null
-      mat.dispose()
-    }
-  }, [blankColor, scene])
+    screenMat.userData.targetOpacity = 1.0
+    screenMaterialRef.current = screenMat
 
-  // Dark matte material for all non-screen case meshes
-  useEffect(() => {
-    const caseMat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color('#111116'),
-      roughness: 0.72,
-      metalness: 0.0,
-      envMapIntensity: 3.0,
+    // ── frosted case shell ────────────────────────────────────────────────────
+    const caseMat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color('#8aadcc'),
       transparent: true,
       opacity: 0,
+      roughness: 0.25,
+      metalness: 0.1,
+      depthWrite: false,
+      side: THREE.DoubleSide,
     })
-    caseMaterialRef.current = caseMat
+    caseMat.userData.targetOpacity = 0.55
+
+    // ── PCB (board.*) ─────────────────────────────────────────────────────────
+    const boardMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#1a8c42'),
+      roughness: 0.55,
+      metalness: 0.05,
+    })
+
+    // ── NeoPixel LEDs ─────────────────────────────────────────────────────────
+    const ledMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#2997ff'),
+      emissive: new THREE.Color('#2997ff'),
+      emissiveIntensity: 3.5,
+    })
+
+    // ── NeoPixel strip ────────────────────────────────────────────────────────
+    const stripMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#1a1a22'),
+      roughness: 0.8,
+    })
+
+    // ── Brushed silver (pins, screws, USB-C port, carabiner) ──────────────────
+    const metalMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#c8d0dc'),
+      roughness: 0.3,
+      metalness: 0.9,
+    })
+
+    // ── Battery (matte black) ─────────────────────────────────────────────────
+    const batteryMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#1c1c1c'),
+      roughness: 0.9,
+    })
+
+    // ── Dark fallback for everything else ─────────────────────────────────────
+    const fallbackMat = new THREE.MeshStandardMaterial({
+      color: new THREE.Color('#222228'),
+      roughness: 0.75,
+      envMapIntensity: 3.0,
+    })
+
+    // Ordered list: first regex that matches the node name wins.
+    const MESH_MATERIALS = [
+      [/^(case_upper|case_lower)/u, caseMat],
+      [/^board/u,                   boardMat],
+      [/^neopixel_LED/u,            ledMat],
+      [/^neopixel_strip/u,          stripMat],
+      [/^(pin|screws_|typeC_port|Carabiner_Body)/u, metalMat],
+      [/^battery/u,                 batteryMat],
+    ]
+
+    function getMaterialForMesh(name) {
+      for (const [regex, mat] of MESH_MATERIALS) {
+        if (regex.test(name)) return mat
+      }
+      return fallbackMat
+    }
 
     scene.traverse((node) => {
-      if (!node.isMesh || isCaseEInkScreenMesh(node)) return
+      if (!node.isMesh) return
+      const mat = isCaseEInkScreenMesh(node)
+        ? screenMat
+        : getMaterialForMesh(node.name)
       if (Array.isArray(node.material)) {
         node.material.forEach((m) => m.dispose?.())
-        node.material = caseMat
       } else {
         node.material?.dispose?.()
-        node.material = caseMat
       }
+      node.material = mat
     })
 
+    allMaterialsRef.current = [
+      screenMat, caseMat, boardMat, ledMat, stripMat, metalMat, batteryMat, fallbackMat,
+    ]
+
     return () => {
-      caseMaterialRef.current = null
-      caseMat.dispose()
+      screenMaterialRef.current = null
+      allMaterialsRef.current = []
+      for (const mat of [screenMat, caseMat, boardMat, ledMat, stripMat, metalMat, batteryMat, fallbackMat]) {
+        mat.dispose()
+      }
     }
-  }, [scene])
+  }, [blankColor, scene])
 
   // Refs seeded to match scrollState initial values so there is no lerp
   // animation on first frame (model appears immediately in hero position).
@@ -109,15 +164,15 @@ export default function GlimpseModel() {
   useFrame(({ clock, delta, invalidate }) => {
     if (!groupRef.current) return
 
-    // Fade-in on mount (400ms)
+    // Fade-in on mount (400 ms).
+    // Each transparent material fades from 0 to its userData.targetOpacity.
     if (mountOpacityRef.current < 1) {
       mountOpacityRef.current = Math.min(1, mountOpacityRef.current + delta / 0.4)
-      const opacity = mountOpacityRef.current
-      if (caseMaterialRef.current) {
-        caseMaterialRef.current.opacity = opacity
-      }
-      if (screenMaterialRef.current) {
-        screenMaterialRef.current.opacity = opacity
+      const t = mountOpacityRef.current
+      for (const mat of allMaterialsRef.current) {
+        if (mat.transparent) {
+          mat.opacity = t * (mat.userData.targetOpacity ?? 1.0)
+        }
       }
       invalidate()
     }
@@ -157,7 +212,6 @@ export default function GlimpseModel() {
     const flash = flashRef.current
 
     if (flash.phase === 'idle' && currentTexRef.current !== targetUrl) {
-      // Start flash: clear screen to white, record target
       flash.phase = 'flash-in'
       flash.elapsed = 0
       flash.nextUrl = targetUrl
@@ -169,7 +223,6 @@ export default function GlimpseModel() {
     if (flash.phase === 'flash-in') {
       flash.elapsed += Math.min(delta, 0.1)
       if (flash.elapsed >= 0.08) {
-        // Peak white reached — swap texture and finish
         currentTexRef.current = flash.nextUrl
         mat.map = textureMap.get(flash.nextUrl) ?? textures[0]
         mat.color.set('#ffffff')
