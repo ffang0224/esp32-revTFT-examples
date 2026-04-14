@@ -64,8 +64,9 @@ export default function GlimpseModel() {
       color: new THREE.Color('#8aadcc'),
       transparent: true,
       opacity: 0,
-      roughness: 0.25,
-      metalness: 0.1,
+      roughness: 0.5,
+      metalness: 0.05,
+      envMapIntensity: 1.2,
       depthWrite: false,
       side: THREE.DoubleSide,
     })
@@ -108,13 +109,12 @@ export default function GlimpseModel() {
     const fallbackMat = new THREE.MeshStandardMaterial({
       color: new THREE.Color('#222228'),
       roughness: 0.75,
-      envMapIntensity: 3.0,
     })
 
     // Ordered list: first regex that matches the node name wins.
     const MESH_MATERIALS = [
       [/^(case_upper|case_lower)/u, caseMat],
-      [/^board/u,                   boardMat],
+      [/^(board|proto_board)/u,      boardMat],
       [/^neopixel_LED/u,            ledMat],
       [/^neopixel_strip/u,          stripMat],
       [/^(pin|screws_|typeC_port|Carabiner_Body)/u, metalMat],
