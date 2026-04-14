@@ -40,14 +40,6 @@ export default function ScrollStory() {
   useEffect(() => {
     const section = sectionRef.current
 
-    // Set initial hero position
-    scrollState.targetX    = HERO_X
-    scrollState.targetZ    = 0
-    scrollState.targetRotY = Math.PI
-    scrollState.screenIndex = 0
-    scrollState.screenImage = null
-    scrollState.screenVisible = true
-
     const trigger = ScrollTrigger.create({
       trigger: section,
       start: 'top top',
@@ -123,7 +115,7 @@ export default function ScrollStory() {
           ))}
         </div>
       </section>
-      <StageDots active={activeStage} count={3} visible={dotsVisible} />
+      <StageDots active={activeStage} count={3} visible={dotsVisible} variant="scroll" />
     </>
   )
 }
