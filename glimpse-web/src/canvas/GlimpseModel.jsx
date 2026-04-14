@@ -76,6 +76,7 @@ export default function GlimpseModel() {
       color: new THREE.Color('#111116'),
       roughness: 0.72,
       metalness: 0.0,
+      envMapIntensity: 3.0,
       transparent: true,
       opacity: 0,
     })
