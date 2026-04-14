@@ -166,7 +166,7 @@ export default function GlimpseModel() {
     }
 
     if (flash.phase === 'flash-in') {
-      flash.elapsed += delta
+      flash.elapsed += Math.min(delta, 0.1)
       if (flash.elapsed >= 0.08) {
         // Peak white reached — swap texture and finish
         currentTexRef.current = flash.nextUrl
