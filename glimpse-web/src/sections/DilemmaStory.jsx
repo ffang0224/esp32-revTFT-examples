@@ -10,7 +10,6 @@ import styles from './DilemmaStory.module.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const HERO_X = 4
 const MODEL_STAGES = [
   { modelX: 4.3, modelZ: 0.0, rotY: Math.PI - 0.04 },
   { modelX: 4.0, modelZ: 0.18, rotY: Math.PI + 0.08 },
@@ -42,12 +41,6 @@ export default function DilemmaStory() {
   useEffect(() => {
     const section = sectionRef.current
 
-    scrollState.targetX = HERO_X
-    scrollState.targetZ = 0
-    scrollState.targetRotY = Math.PI
-    scrollState.screenImage = null
-    scrollState.screenVisible = false
-
     const trigger = ScrollTrigger.create({
       trigger: section,
       start: 'top top',
@@ -75,9 +68,6 @@ export default function DilemmaStory() {
       },
       onLeave: () => {
         setDotsVisible(false)
-        scrollState.targetX = 0
-        scrollState.targetZ = 0
-        scrollState.targetRotY = Math.PI
         scrollState.screenImage = null
         scrollState.screenVisible = true
       },
@@ -88,9 +78,9 @@ export default function DilemmaStory() {
         setDotsVisible(false)
         setStoryProgress(0)
         setFrame(getStoryFrame(0, story.dilemma, story.prophecy))
-        scrollState.targetX = HERO_X
-        scrollState.targetZ = 0
-        scrollState.targetRotY = Math.PI
+        scrollState.targetX = MODEL_STAGES[0].modelX
+        scrollState.targetZ = MODEL_STAGES[0].modelZ
+        scrollState.targetRotY = MODEL_STAGES[0].rotY
         scrollState.screenImage = null
         scrollState.screenVisible = false
         scrollState.screenIndex = 0
@@ -192,7 +182,7 @@ export default function DilemmaStory() {
           </div>
         </div>
       </section>
-      <StageDots active={frame.activeStage} count={5} visible={dotsVisible} />
+      <StageDots active={frame.activeStage} count={5} visible={dotsVisible} variant="dilemma" />
     </>
   )
 }
