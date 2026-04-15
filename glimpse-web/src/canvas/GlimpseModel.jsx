@@ -260,7 +260,7 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
     const animatedGroups = []
     const assemblyMaterials = []
     const clonedMaterials = []
-    const ledLight = new THREE.PointLight('#ffd39a', 4.8, 2.8, 2)
+    const ledLight = new THREE.PointLight('#ffd39a', 3.2, 2.8, 2)
     const ledLightPosition = getLedLightPosition(modelScene)
     if (ledLightPosition) {
       ledLight.position.copy(ledLightPosition)

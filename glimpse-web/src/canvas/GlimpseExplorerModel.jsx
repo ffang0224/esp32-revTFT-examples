@@ -171,7 +171,7 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'light
     screenMat.needsUpdate = true
 
     const clonedMaterials = []
-    const ledLight = new THREE.PointLight('#ffd39a', 4.8, 2.8, 2)
+    const ledLight = new THREE.PointLight('#ffd39a', 3.2, 2.8, 2)
     const ledLightPosition = getLedLightPosition(modelScene)
     if (ledLightPosition) {
       ledLight.position.copy(ledLightPosition)

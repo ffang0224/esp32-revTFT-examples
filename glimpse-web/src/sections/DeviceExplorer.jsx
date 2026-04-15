@@ -15,7 +15,7 @@ function ExplorerScene({ partVisibility, caseTone, controlsEnabled }) {
   return (
     <>
       <Lights />
-      <Environment preset="studio" environmentIntensity={0.84} />
+      <Environment preset="studio" environmentIntensity={0.52} />
       <OrbitControls
         makeDefault
         enabled={controlsEnabled}
@@ -94,7 +94,7 @@ export default function DeviceExplorer() {
             onCreated={({ gl, camera }) => {
               gl.outputColorSpace = THREE.SRGBColorSpace
               gl.toneMapping = THREE.ACESFilmicToneMapping
-              gl.toneMappingExposure = 0.82
+              gl.toneMappingExposure = 0.66
               camera.lookAt(0, 0, 0)
             }}
           >
