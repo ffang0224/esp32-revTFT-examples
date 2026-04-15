@@ -110,7 +110,7 @@ export default function DeviceExplorer() {
             <Suspense fallback={<ModelSkeleton />}>
               <ExplorerScene
                 partVisibility={partVisibility}
-                caseTone="dark"
+                caseTone="light"
                 controlsEnabled={controlsEnabled}
               />
             </Suspense>

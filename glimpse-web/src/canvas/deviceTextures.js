@@ -50,6 +50,41 @@ export const DEVICE_TEXTURE_URLS = {
 }
 
 const loggedUnmatchedMaterialNames = new Set()
+let frostedDetailTexture = null
+
+function createProceduralFrostTexture(size = 256) {
+  const data = new Uint8Array(size * size)
+  const rand = (x, y) => {
+    const value = Math.sin(x * 127.1 + y * 311.7) * 43758.5453123
+    return value - Math.floor(value)
+  }
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const base = rand(x * 0.73, y * 0.73)
+      const medium = rand(x * 1.91 + 17.0, y * 1.91 + 29.0) * 0.55
+      const fine = rand(x * 4.87 + 101.0, y * 4.87 + 53.0) * 0.2
+      const value = Math.max(0, Math.min(1, base * 0.45 + medium + fine))
+      data[y * size + x] = Math.round(value * 255)
+    }
+  }
+
+  const texture = new THREE.DataTexture(data, size, size, THREE.RedFormat)
+  texture.wrapS = THREE.RepeatWrapping
+  texture.wrapT = THREE.RepeatWrapping
+  texture.repeat.set(28, 28)
+  texture.magFilter = THREE.LinearFilter
+  texture.minFilter = THREE.LinearMipmapLinearFilter
+  texture.generateMipmaps = true
+  texture.colorSpace = THREE.NoColorSpace
+  texture.needsUpdate = true
+  return texture
+}
+
+function getProceduralFrostTexture() {
+  if (!frostedDetailTexture) frostedDetailTexture = createProceduralFrostTexture()
+  return frostedDetailTexture
+}
 
 function logUnmatchedMaterialName(materialName) {
   if (!import.meta.env.DEV) return
@@ -62,12 +97,7 @@ function logUnmatchedMaterialName(materialName) {
 /** Outer shell / case plastics (frosted acrylic look + translucency). */
 export function isCaseShellMaterial(materialName) {
   const n = (materialName ?? '').trim()
-  return (
-    n === 'White Opaque Plastic'
-    || n === 'White Plastic'
-    || n === 'Black Plastic'
-    || n === 'Frosted Acrylic'
-  )
+  return n === 'Frosted Acrylic'
 }
 
 /**
@@ -80,6 +110,8 @@ export function getDeviceTextureProfile(materialName) {
   const isLampMaterial = /^lamp(?:\.\d+)?$/i.test(n)
   if (n === 'Screen') return null
   if (isCaseShellMaterial(n)) return 'frostedAcrylic'
+  if (n === 'Black Plastic') return 'blackPlastic'
+  if (n === 'White Plastic' || n === 'White Opaque Plastic') return 'whitePlastic'
   if (n === 'Copper') return 'copper'
   if (n === 'AR3DMat PBR Brushed Aluminum') return 'brushedAluminum'
   if (n.includes('Stainless Steel')) return 'brushedAluminum'
@@ -106,10 +138,14 @@ export function getDeviceTextureProfile(materialName) {
 export function getForcedMeshTextureProfile(meshName) {
   const n = (meshName ?? '').trim().toLowerCase()
   if (!n) return null
-  if (n === 'proto_board') return 'blackBoard'
+  if (/^e_ink_screen\.(?:0?38|0?39)$/u.test(n)) return 'blackBoard'
+  if (n.startsWith('vibration_')) return 'brushedAluminum'
+  if (n === 'typec_port.003' || n === 'typec_port_003') return 'whitePlastic'
+  if (/^case_(upper|lower)(?:\.\d+)?$/u.test(n)) return 'frostedAcrylic'
+  if (n === 'proto_board' || /^board(?:\.\d+)?$/u.test(n)) return 'blackBoard'
   if (n.startsWith('neopixel_strip')) return 'ledDiffuser'
   if (n.startsWith('neopixel_led')) return 'ledEmitter'
-  if (n.includes('screw')) return 'untitledPlastic'
+  if (n.includes('screw')) return 'blackPlastic'
   return null
 }
 
@@ -121,12 +157,10 @@ function isPbrMaterial(material) {
 }
 
 /**
- * Hero case shell: **see-through frosted plastic** via alpha only (`transparent` + `opacity`).
- * We keep **`transmission = 0`** so we don’t hit thin-shell transmissive shader issues (black
- * rings head-on). Internals show through normal alpha blending; `depthWrite: false` helps
- * stacking with geometry behind the wall.
+ * Hero case shell: frosted translucent plastic via alpha blending. This is less physically
+ * accurate than transmission, but it behaves much more reliably on the thin exported shell.
  */
-function applyCaseShellTranslucency(material, materialName, caseTone = 'auto') {
+function applyCaseShellTranslucency(material, materialName, caseTone = 'light') {
   if (!isPbrMaterial(material) || !isCaseShellMaterial(materialName)) return
 
   material.userData.heroSeeThroughCase = true
@@ -139,7 +173,7 @@ function applyCaseShellTranslucency(material, materialName, caseTone = 'auto') {
     /* Dark, neutral “smoked” base — reads black in the mass but still tints what’s behind when translucent */
     material.color = new THREE.Color('#141518')
   } else {
-    material.color = new THREE.Color('#bfbbb4')
+    material.color = new THREE.Color('#d7dbe1')
   }
 
   if (material.isMeshPhysicalMaterial) {
@@ -151,25 +185,22 @@ function applyCaseShellTranslucency(material, materialName, caseTone = 'auto') {
     material.attenuationDistance = Infinity
 
     material.metalness = 0
-    /* Black shell: a bit more rough + softer spec than white — smoked frosted, not glossy gray */
-    material.roughness = isDarkShell ? 0.58 : 0.5
-    material.specularIntensity = isDarkShell ? 0.42 : 0.5
-    material.ior = 1.5
+    material.roughness = isDarkShell ? 0.58 : 0.68
+    material.specularIntensity = isDarkShell ? 0.42 : 0.44
+    material.ior = 1.491
     material.clearcoat = 0
     material.clearcoatRoughness = 0
     material.sheen = 0
 
     material.transparent = true
-    /* Light frosted: lower opacity = more see-through. Black “smoked”: darker base + ~0.38–0.48
-       opacity reads translucent without turning muddy like mid-gray + alpha. */
-    material.opacity = isDarkShell ? 1 : 0.52
+    material.opacity = isDarkShell ? 1 : 0.78
     material.depthWrite = false
     material.depthTest = true
     material.alphaMap = null
-    material.envMapIntensity = isDarkShell ? 0.68 : 0.72
+    material.envMapIntensity = isDarkShell ? 0.68 : 0.38
   } else {
     material.transparent = true
-    material.opacity = isDarkShell ? 0.46 : 0.55
+    material.opacity = isDarkShell ? 0.46 : 0.76
     material.depthWrite = false
   }
 
@@ -218,7 +249,7 @@ export function configureLoadedDeviceTextures(textures) {
  * @param {Record<string, THREE.Texture>} textures loaded via useTexture(DEVICE_TEXTURE_URLS)
  * @param {string} [sourceMaterialName] original GLTF material name (for case translucency)
  */
-export function applyDeviceTextureProfile(material, profile, textures, sourceMaterialName = '', caseTone = 'auto') {
+export function applyDeviceTextureProfile(material, profile, textures, sourceMaterialName = '', caseTone = 'light') {
   if (!isPbrMaterial(material) || !profile || !textures) return
 
   switch (profile) {
@@ -251,18 +282,71 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
     }
     case 'blackBoard': {
       material.map = null
+      material.bumpMap = null
       material.normalMap = null
       material.roughnessMap = null
       material.metalnessMap = null
       material.alphaMap = null
       material.aoMap = null
-      material.color = new THREE.Color('#0a0a0b')
+      material.emissiveMap = null
+      material.color = new THREE.Color('#000000')
+      material.emissive = new THREE.Color('#000000')
+      material.emissiveIntensity = 0
+      material.metalness = 0
+      material.roughness = 1
+      material.envMapIntensity = 0.04
+      if ('specularIntensity' in material) material.specularIntensity = 0.05
+      material.transparent = false
+      material.opacity = 1
+      material.depthWrite = true
+      material.depthTest = true
+      material.side = THREE.FrontSide
+      if (material.isMeshPhysicalMaterial) {
+        material.transmission = 0
+        material.transmissionMap = null
+        material.thickness = 0
+        material.thicknessMap = null
+        material.attenuationColor = new THREE.Color('#000000')
+        material.attenuationDistance = Infinity
+        material.clearcoat = 0
+        material.clearcoatRoughness = 0
+        material.ior = 1.3
+        material.sheen = 0
+      }
+      break
+    }
+    case 'blackPlastic': {
+      material.map = null
+      material.bumpMap = null
+      material.normalMap = null
+      material.roughnessMap = null
+      material.metalnessMap = null
+      material.alphaMap = null
+      material.aoMap = null
+      material.color = new THREE.Color('#000000')
       material.emissive = new THREE.Color('#000000')
       material.emissiveMap = null
-      material.metalness = 0.02
-      material.roughness = 0.86
-      material.envMapIntensity = 0.22
-      if ('specularIntensity' in material) material.specularIntensity = 0.18
+      material.emissiveIntensity = 0
+      material.metalness = 0
+      material.roughness = 0.5
+      material.transparent = false
+      material.opacity = 1
+      material.depthWrite = true
+      material.depthTest = true
+      material.envMapIntensity = 0.18
+      if ('specularIntensity' in material) material.specularIntensity = 0.2727
+      if (material.isMeshPhysicalMaterial) {
+        material.transmission = 0
+        material.transmissionMap = null
+        material.thickness = 0
+        material.thicknessMap = null
+        material.attenuationColor = new THREE.Color('#000000')
+        material.attenuationDistance = Infinity
+        material.clearcoat = 0
+        material.clearcoatRoughness = 0.03
+        material.ior = 1.45
+        material.sheen = 0
+      }
       break
     }
     case 'whitePlastic': {
@@ -277,9 +361,9 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       break
     }
     case 'frostedAcrylic': {
-      /* Solid frosted acrylic: texture maps here were adding dark scratches/grunge
-         (plastic07 + recycled normal/roughness) that read as black lines under transmission. */
       material.map = null
+      material.bumpMap = getProceduralFrostTexture()
+      material.bumpScale = 0.015
       material.normalMap = null
       material.roughnessMap = null
       material.metalnessMap = null
@@ -397,5 +481,7 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
   }
 
   material.needsUpdate = true
-  applyCaseShellTranslucency(material, sourceMaterialName, caseTone)
+  if (profile === 'frostedAcrylic') {
+    applyCaseShellTranslucency(material, sourceMaterialName, caseTone)
+  }
 }

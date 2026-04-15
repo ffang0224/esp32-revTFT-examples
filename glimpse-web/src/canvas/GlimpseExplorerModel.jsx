@@ -46,6 +46,47 @@ function isLedNodeName(name = '') {
   return /^neopixel_(strip|led)/u.test(name)
 }
 
+function applyDirectVibrationOverride(material, meshName) {
+  const n = (meshName ?? '').trim().toLowerCase()
+  if (!n.startsWith('vibration_')) return false
+
+  material.map = null
+  material.bumpMap = null
+  material.normalMap = null
+  material.roughnessMap = null
+  material.metalnessMap = null
+  material.alphaMap = null
+  material.aoMap = null
+  material.emissiveMap = null
+  const isDisk = n === 'vibration_disk'
+  material.color = isDisk
+    ? new THREE.Color('#b8bcc3')
+    : new THREE.Color('#000000')
+  material.emissive = new THREE.Color('#000000')
+  material.emissiveIntensity = 0
+  material.metalness = isDisk ? 1 : 0
+  material.roughness = isDisk ? 0.34 : 0.5
+  material.transparent = false
+  material.opacity = 1
+  material.depthWrite = true
+  material.depthTest = true
+  material.side = THREE.FrontSide
+  material.envMapIntensity = isDisk ? 0.45 : 0.18
+  if ('specularIntensity' in material) material.specularIntensity = isDisk ? 0.5 : 0.2727
+  if (material.isMeshPhysicalMaterial) {
+    material.transmission = 0
+    material.transmissionMap = null
+    material.thickness = 0
+    material.thicknessMap = null
+    material.clearcoat = 0
+    material.clearcoatRoughness = isDisk ? 0 : 0.03
+    material.ior = isDisk ? 1.5 : 1.45
+    material.sheen = 0
+  }
+  material.needsUpdate = true
+  return true
+}
+
 function getLedLightPosition(modelScene) {
   modelScene.updateMatrixWorld(true)
 
@@ -73,7 +114,7 @@ function applyExplorerVisibility(modelScene, partVisibility) {
 /**
  * @param {{ partVisibility: Record<string, boolean>, caseTone?: 'light' | 'dark' | 'auto' }} props
  */
-export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark' }) {
+export default function GlimpseExplorerModel({ partVisibility, caseTone = 'light' }) {
   const invalidate = useThree((s) => s.invalidate)
 
   const { scene } = useGLTF(caseGltfUrl)
@@ -142,6 +183,10 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark'
       const cloned = material.clone()
       if (cloned.map) cloned.map.colorSpace = THREE.SRGBColorSpace
       if (cloned.emissiveMap) cloned.emissiveMap.colorSpace = THREE.SRGBColorSpace
+      if (applyDirectVibrationOverride(cloned, meshName)) {
+        clonedMaterials.push(cloned)
+        return cloned
+      }
       const forcedProfile = getForcedMeshTextureProfile(meshName)
       const profile = forcedProfile ?? getDeviceTextureProfile(material.name)
       if (profile) {
