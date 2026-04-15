@@ -3,7 +3,7 @@ import styles from './Footer.module.css'
 export default function Footer() {
   return (
     <footer className={styles.footer}>
-      <span className={styles.logo}>Glimpse</span>
+      <img src="/logotext.svg" alt="Glimpse" className={styles.logo} />
       <span className={styles.right}>
         Open Source · 2025 ·{' '}
         <a

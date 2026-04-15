@@ -17,6 +17,7 @@ import {
   configureLoadedDeviceTextures,
   getDeviceTextureProfile,
 } from './deviceTextures'
+import { configureEInkStoryTexture } from './eInkScreenTexture'
 
 import caseGltfUrl from '../../case-only.glb?url'
 
@@ -173,13 +174,7 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
 
   useEffect(() => {
     textures.forEach((texture) => {
-      texture.flipY = false
-      texture.colorSpace = THREE.SRGBColorSpace
-      texture.wrapS = THREE.RepeatWrapping
-      texture.repeat.x = -1
-      texture.offset.x = 1
-      texture.generateMipmaps = false
-      texture.needsUpdate = true
+      configureEInkStoryTexture(texture)
     })
   }, [textures])
 

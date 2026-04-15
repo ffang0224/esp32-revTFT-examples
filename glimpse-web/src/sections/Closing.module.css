@@ -17,3 +17,23 @@
   text-align: center;
   color: var(--text);
 }
+
+.word {
+  color: var(--text);
+}
+
+.wordHighlight {
+  color: var(--accent, #4f8cff);
+}
+
+.cursor {
+  margin-left: 0.08em;
+  color: var(--text-dim);
+  animation: blink 1s steps(1, end) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}

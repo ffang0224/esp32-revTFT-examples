@@ -6,8 +6,63 @@ import * as THREE from 'three'
  *
  * Tuned to keep more of the source image visible (less zoom) while still clearing rounded corners.
  */
-export const E_INK_UV_MARGIN_X = 0.055
-export const E_INK_UV_MARGIN_Y = 0.06
+export const E_INK_UV_MARGIN_X = 0
+export const E_INK_UV_MARGIN_Y = 0
+export const E_INK_IMAGE_INSET_X = 0.12
+export const E_INK_IMAGE_INSET_Y = 0.12
+
+function scheduleDeferredEInkConfigure(texture) {
+  if (typeof window === 'undefined') return
+  if (texture.userData?.eInkDeferredConfigureScheduled) return
+
+  texture.userData = { ...texture.userData, eInkDeferredConfigureScheduled: true }
+
+  const applyWhenReady = () => {
+    const image = texture.image
+    if (image?.width && image?.height) {
+      texture.userData = { ...texture.userData, eInkDeferredConfigureScheduled: false }
+      configureEInkStoryTexture(texture)
+      return
+    }
+    window.requestAnimationFrame(applyWhenReady)
+  }
+
+  window.requestAnimationFrame(applyWhenReady)
+}
+
+function bakeInsetImage(texture) {
+  const image = texture.image
+  if (!image?.width || !image?.height) return false
+  if (texture.userData?.eInkInsetBaked) return true
+  if (typeof document === 'undefined') return false
+
+  const width = image.width
+  const height = image.height
+  const insetX = Math.round(width * E_INK_IMAGE_INSET_X)
+  const insetY = Math.round(height * E_INK_IMAGE_INSET_Y)
+  const drawWidth = Math.max(1, width - insetX * 2)
+  const drawHeight = Math.max(1, height - insetY * 2)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return false
+
+  ctx.fillStyle = '#f2ece4'
+  ctx.fillRect(0, 0, width, height)
+
+  // Preserve the existing mirrored screen orientation while shrinking content.
+  ctx.translate(width, 0)
+  ctx.scale(-1, 1)
+  ctx.drawImage(image, insetX, insetY, drawWidth, drawHeight)
+  ctx.setTransform(1, 0, 0, 1, 0, 0)
+
+  texture.image = canvas
+  texture.userData = { ...texture.userData, eInkInsetBaked: true }
+  return true
+}
 
 /**
  * Horizontal flip (matches previous story-texture setup) + centered inset on both axes.
@@ -21,17 +76,16 @@ export const E_INK_UV_MARGIN_Y = 0.06
  * @param {THREE.Texture} texture
  */
 export function configureEInkStoryTexture(texture) {
-  const mx = E_INK_UV_MARGIN_X
-  const my = E_INK_UV_MARGIN_Y
-  const wx = 1 - 2 * mx
-  const wy = 1 - 2 * my
+  const baked = bakeInsetImage(texture)
 
   texture.flipY = false
   texture.colorSpace = THREE.SRGBColorSpace
-  texture.wrapS = THREE.RepeatWrapping
-  texture.wrapT = THREE.RepeatWrapping
-  texture.repeat.set(-wx, wy)
-  texture.offset.set(1 - mx, my)
+  texture.wrapS = THREE.ClampToEdgeWrapping
+  texture.wrapT = THREE.ClampToEdgeWrapping
+  texture.repeat.set(1, 1)
+  texture.offset.set(0, 0)
   texture.generateMipmaps = false
   texture.needsUpdate = true
+
+  if (!baked) scheduleDeferredEInkConfigure(texture)
 }

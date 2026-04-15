@@ -14,7 +14,7 @@ export default function Nav({ lenisRef, hidden = false, onTryIt, light = false }
   return (
     <nav className={`${styles.nav} ${light ? styles.light : ''} ${hidden ? styles.hidden : ''}`}>
       <a href="#" className={styles.logo} onClick={(e) => handleClick(e, '#hero')}>
-        Glimpse
+        <img src="/logotext.svg" alt="Glimpse" className={styles.logoImage} />
       </a>
       <ul className={styles.links}>
         <li>

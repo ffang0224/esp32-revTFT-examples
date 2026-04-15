@@ -11,10 +11,9 @@
 }
 
 .logo {
-  font-size: 0.95rem;
-  font-weight: 500;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+  width: auto;
+  height: 1.1rem;
+  display: block;
 }
 
 .right {
