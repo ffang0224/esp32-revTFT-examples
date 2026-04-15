@@ -27,12 +27,11 @@ body {
   color: var(--text);
   font-family: 'DM Mono', ui-monospace, monospace;
   overflow-x: hidden;
-  cursor: auto;
+  cursor: none;
 }
 
-a,
-button {
-  cursor: pointer;
+* {
+  cursor: none !important;
 }
 
 /* Grain overlay */

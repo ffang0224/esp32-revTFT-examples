@@ -1,15 +1,20 @@
 import * as THREE from 'three'
 
 /**
- * Per-edge margins in **UV space** (0–1) so bitmap content sits inside the visually flat area of the
- * panel and doesn’t crowd rounded corners / bezel in `case-only.glb`.
- *
- * Tuned to keep more of the source image visible (less zoom) while still clearing rounded corners.
+ * Per-edge margins in **UV space** (0–1) — reserved for future UV tweaks; story bitmap uses
+ * `E_INK_IMAGE_INSET_*` below.
  */
 export const E_INK_UV_MARGIN_X = 0
 export const E_INK_UV_MARGIN_Y = 0
-export const E_INK_IMAGE_INSET_X = 0.12
-export const E_INK_IMAGE_INSET_Y = 0.12
+
+/**
+ * Fraction of texture width/height to leave as paper-colored margin around the drawn image
+ * (object-fit: contain inside that inner box, centered).
+ *
+ * ~6% per edge shrinks the art slightly so it clears the on-mesh bezel without the old 12% crop.
+ */
+export const E_INK_IMAGE_INSET_X = 0.06
+export const E_INK_IMAGE_INSET_Y = 0.06
 
 function scheduleDeferredEInkConfigure(texture) {
   if (typeof window === 'undefined') return
@@ -38,10 +43,13 @@ function bakeInsetImage(texture) {
 
   const width = image.width
   const height = image.height
-  const insetX = Math.round(width * E_INK_IMAGE_INSET_X)
-  const insetY = Math.round(height * E_INK_IMAGE_INSET_Y)
-  const drawWidth = Math.max(1, width - insetX * 2)
-  const drawHeight = Math.max(1, height - insetY * 2)
+  const innerW = Math.max(1, width * (1 - 2 * E_INK_IMAGE_INSET_X))
+  const innerH = Math.max(1, height * (1 - 2 * E_INK_IMAGE_INSET_Y))
+  const scale = Math.min(innerW / width, innerH / height)
+  const drawW = Math.max(1, Math.round(width * scale))
+  const drawH = Math.max(1, Math.round(height * scale))
+  const offsetX = Math.round(width * E_INK_IMAGE_INSET_X + (innerW - drawW) / 2)
+  const offsetY = Math.round(height * E_INK_IMAGE_INSET_Y + (innerH - drawH) / 2)
 
   const canvas = document.createElement('canvas')
   canvas.width = width
@@ -53,7 +61,7 @@ function bakeInsetImage(texture) {
   ctx.fillStyle = '#f2ece4'
   ctx.fillRect(0, 0, width, height)
 
-  ctx.drawImage(image, insetX, insetY, drawWidth, drawHeight)
+  ctx.drawImage(image, offsetX, offsetY, drawW, drawH)
 
   texture.image = canvas
   texture.userData = { ...texture.userData, eInkInsetBaked: true }
@@ -61,7 +69,8 @@ function bakeInsetImage(texture) {
 }
 
 /**
- * Centered inset on both axes.
+ * Paints the source into a same-size canvas: paper fill, then the image **contained** in the
+ * inset inner rect (no stretching if aspect ratios differ).
  *
  * Other ways to fix corner clipping (if this isn’t enough):
  * - **Authoring**: add padding inside the source artwork, or edit UVs in Blender so the active
