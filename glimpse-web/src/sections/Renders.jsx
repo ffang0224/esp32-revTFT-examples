@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import renderFront from '../../renders/front.png'
-import renderIsometric from '../../renders/isometric.png'
 import render45 from '../../renders/45 degrees.png'
 import renderBack from '../../renders/back.png'
 import renderLayered from '../../renders/layered.png'
@@ -11,8 +10,7 @@ const RENDERS = [
   { src: renderLayered,   alt: 'Layered exploded view', hero: true },
   { src: renderFront,     alt: 'Front view with e-ink display' },
   { src: renderBack,      alt: 'Back view through frosted shell' },
-  { src: renderIsometric, alt: 'Isometric view from above' },
-  { src: render45,        alt: '45° side view showing internals' },
+  { src: render45,        alt: '45° side view showing internals', hero: true },
 ]
 
 export default function Renders() {
@@ -44,7 +42,6 @@ export default function Renders() {
     <>
       <section className={styles.section} id="renders" aria-label="Product renders">
         <div className={styles.inner}>
-          <h2 className={styles.heading}>Renders</h2>
           <div className={styles.grid}>
             {RENDERS.map((r, i) => (
               <figure

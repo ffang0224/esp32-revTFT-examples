@@ -79,7 +79,7 @@
 .lbClose,
 .lbPrev,
 .lbNext {
-  position: fixed;
+  position: absolute;
   background: none;
   border: none;
   color: #fff;

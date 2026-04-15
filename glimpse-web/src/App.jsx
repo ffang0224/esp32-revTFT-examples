@@ -1,7 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Lenis from 'lenis'
-import gsap from 'gsap'
-import { ScrollTrigger } from 'gsap/ScrollTrigger'
 
 import Nav from './sections/Nav'
 import Hero from './sections/Hero'
@@ -17,8 +14,6 @@ import DemoOverlay from './DemoOverlay'
 
 import './styles/globals.css'
 import styles from './App.module.css'
-
-gsap.registerPlugin(ScrollTrigger)
 
 function readSectionDebugFromUrl() {
   if (typeof window === 'undefined') return null
@@ -43,26 +38,6 @@ export default function App() {
     document.documentElement.classList.toggle('section-debug', sectionDebug)
     return () => document.documentElement.classList.remove('section-debug')
   }, [sectionDebug])
-
-  useEffect(() => {
-    const lenis = new Lenis({
-      duration: 1.4,
-      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-      smoothWheel: true,
-    })
-    lenisRef.current = lenis
-
-    lenis.on('scroll', ScrollTrigger.update)
-
-    const rafCallback = (time) => lenis.raf(time * 1000)
-    gsap.ticker.add(rafCallback)
-    gsap.ticker.lagSmoothing(0)
-
-    return () => {
-      gsap.ticker.remove(rafCallback)
-      lenis.destroy()
-    }
-  }, [])
 
   useEffect(() => {
     const updateHeroNav = () => {
@@ -100,9 +75,6 @@ export default function App() {
         <Hero />
 
         <div className={styles.divider} />
-        <DeviceExplorer />
-
-        <div className={styles.divider} />
         <UserExperience />
 
         <div className={styles.divider} />
@@ -110,6 +82,9 @@ export default function App() {
 
         <div className={styles.divider} />
         <Specs />
+
+        <div className={styles.divider} />
+        <DeviceExplorer />
 
         <div className={styles.divider} />
         <MakeItYourOwn />

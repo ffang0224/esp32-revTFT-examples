@@ -80,7 +80,6 @@ export default function DeviceExplorer() {
           aria-label="Interactive 3D model — drag to rotate"
           onPointerEnter={() => setControlsEnabled(true)}
           onPointerDown={() => setControlsEnabled(true)}
-          onPointerLeave={() => setControlsEnabled(false)}
         >
           <Canvas
             className={styles.canvas}
@@ -140,7 +139,7 @@ export default function DeviceExplorer() {
               aria-pressed={showInternals}
               onClick={() => setShowInternals((prev) => !prev)}
             >
-              Internals
+              Components
             </button>
           </div>
         </div>
