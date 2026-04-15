@@ -110,7 +110,7 @@ function isCaseEInkScreenMesh(mesh) {
 }
 
 function isLedNodeName(name = '') {
-  return /^neopixel_(strip|led)/u.test(name)
+  return /^neopixel_(strip|led)/iu.test(name)
 }
 
 function applyDirectVibrationOverride(material, meshName) {

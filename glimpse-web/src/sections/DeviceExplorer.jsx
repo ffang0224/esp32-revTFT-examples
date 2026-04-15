@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
-import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
+import { Environment, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
 
 import GlimpseExplorerModel from '../canvas/GlimpseExplorerModel'
@@ -16,15 +16,6 @@ function ExplorerScene({ partVisibility, caseTone, controlsEnabled }) {
     <>
       <Lights />
       <Environment preset="studio" environmentIntensity={0.84} />
-      <ContactShadows
-        position={[0, -1.72, 0]}
-        opacity={0.28}
-        scale={14}
-        blur={2.2}
-        far={7}
-        resolution={512}
-        color="#1a1a22"
-      />
       <OrbitControls
         makeDefault
         enabled={controlsEnabled}

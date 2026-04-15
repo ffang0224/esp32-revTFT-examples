@@ -176,7 +176,7 @@ function applyCaseShellTranslucency(material, materialName, caseTone = 'light') 
     /* Dark, neutral “smoked” base — reads black in the mass but still tints what’s behind when translucent */
     material.color = new THREE.Color('#141518')
   } else {
-    material.color = new THREE.Color('#d7dbe1')
+    material.color = new THREE.Color('#f3ede0')
   }
 
   if (material.isMeshPhysicalMaterial) {
@@ -195,16 +195,16 @@ function applyCaseShellTranslucency(material, materialName, caseTone = 'light') 
     material.clearcoatRoughness = 0
     material.sheen = 0
 
-    material.transparent = true
-    material.opacity = isDarkShell ? 1 : 0.78
-    material.depthWrite = false
+    material.transparent = false
+    material.opacity = 1
+    material.depthWrite = true
     material.depthTest = true
     material.alphaMap = null
     material.envMapIntensity = isDarkShell ? 0.68 : 0.38
   } else {
-    material.transparent = true
-    material.opacity = isDarkShell ? 0.46 : 0.76
-    material.depthWrite = false
+    material.transparent = false
+    material.opacity = 1
+    material.depthWrite = true
   }
 
   material.needsUpdate = true
