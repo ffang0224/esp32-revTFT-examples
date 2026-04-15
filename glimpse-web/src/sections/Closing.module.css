@@ -23,12 +23,15 @@
 }
 
 .wordHighlight {
-  color: var(--accent, #4f8cff);
+  color: var(--text);
+  font-style: italic;
 }
 
 .cursor {
   margin-left: 0.08em;
+  display: inline-block;
   color: var(--text-dim);
+  transform: translateY(-0.08em);
   animation: blink 1s steps(1, end) infinite;
 }
 

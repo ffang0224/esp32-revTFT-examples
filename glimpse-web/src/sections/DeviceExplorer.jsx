@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -47,6 +47,7 @@ function ExplorerScene({ partVisibility, caseTone }) {
 }
 
 export default function DeviceExplorer() {
+  const stageRef = useRef(null)
   const defaultVis = useMemo(() => createDefaultExplorerVisibility(), [])
   const [partVisibility, setPartVisibility] = useState(defaultVis)
   const [caseTone, setCaseTone] = useState('dark')
@@ -64,17 +65,30 @@ export default function DeviceExplorer() {
     [partVisibility],
   )
 
+  useEffect(() => {
+    const stage = stageRef.current
+    if (!stage) return undefined
+
+    const stopStageWheelScroll = (event) => {
+      event.preventDefault()
+    }
+
+    stage.addEventListener('wheel', stopStageWheelScroll, { passive: false })
+    return () => stage.removeEventListener('wheel', stopStageWheelScroll)
+  }, [])
+
   return (
     <section className={styles.section} id="device-explorer" aria-label="Explore the device">
       <div className={styles.inner}>
         <header className={styles.header}>
           <h2 className={styles.kicker}>Explore</h2>
           <p className={styles.lede}>
-            Twist the model and peel layers — same hardware as the rest of the page.
+            Twist the model and see the device.
           </p>
         </header>
 
         <div
+          ref={stageRef}
           className={styles.stage}
           role="region"
           aria-label="Interactive 3D model — drag to rotate"

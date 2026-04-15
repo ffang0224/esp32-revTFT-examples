@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Lenis from 'lenis'
 import gsap from 'gsap'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
@@ -78,15 +78,10 @@ export default function App() {
     }
   }, [])
 
-  const openDemo = useCallback(() => {
-    setNavHidden(true)
-    setIsDemoOpen(true)
-  }, [])
-
-  const closeDemo = useCallback(() => {
+  const closeDemo = () => {
     setIsDemoOpen(false)
     setNavHidden(false)
-  }, [])
+  }
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -99,7 +94,7 @@ export default function App() {
   return (
     <>
       <Cursor />
-      <Nav lenisRef={lenisRef} hidden={navHidden || heroNavHidden} onTryIt={openDemo} light />
+      <Nav lenisRef={lenisRef} hidden={navHidden || heroNavHidden} light />
 
       <main className={`${styles.main} ${isDemoOpen ? styles.mainHidden : ''}`}>
         <Hero />

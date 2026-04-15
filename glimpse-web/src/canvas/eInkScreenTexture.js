@@ -53,11 +53,7 @@ function bakeInsetImage(texture) {
   ctx.fillStyle = '#f2ece4'
   ctx.fillRect(0, 0, width, height)
 
-  // Preserve the existing mirrored screen orientation while shrinking content.
-  ctx.translate(width, 0)
-  ctx.scale(-1, 1)
   ctx.drawImage(image, insetX, insetY, drawWidth, drawHeight)
-  ctx.setTransform(1, 0, 0, 1, 0, 0)
 
   texture.image = canvas
   texture.userData = { ...texture.userData, eInkInsetBaked: true }
@@ -65,7 +61,7 @@ function bakeInsetImage(texture) {
 }
 
 /**
- * Horizontal flip (matches previous story-texture setup) + centered inset on both axes.
+ * Centered inset on both axes.
  *
  * Other ways to fix corner clipping (if this isn’t enough):
  * - **Authoring**: add padding inside the source artwork, or edit UVs in Blender so the active

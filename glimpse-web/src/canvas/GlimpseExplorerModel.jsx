@@ -35,9 +35,9 @@ function isExcludedFitNode(node) {
 }
 
 function isCaseEInkScreenMesh(mesh) {
-  const name = mesh.name ?? ''
-  const parentName = mesh.parent?.name ?? ''
-  return /^e_ink_screen/u.test(name) || /^e_ink_screen/u.test(parentName)
+  const name = (mesh.name ?? '').toLowerCase()
+  const parentName = (mesh.parent?.name ?? '').toLowerCase()
+  return name === 'screen' || parentName === 'screen'
 }
 
 function applyExplorerVisibility(modelScene, partVisibility) {
@@ -97,8 +97,13 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark'
     const screenMat = new THREE.MeshBasicMaterial({
       color: new THREE.Color('#ffffff'),
       map: screenTexture,
-      transparent: false,
+      transparent: true,
       opacity: 1,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      depthWrite: false,
     })
     screenMat.needsUpdate = true
 
@@ -123,6 +128,7 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark'
       node.userData.explorerPartId = getExplorerPartId(node.name ?? '')
 
       if (isCaseEInkScreenMesh(node)) {
+        node.renderOrder = 10
         node.material = screenMat
       } else if (Array.isArray(node.material)) {
         node.material = node.material.map((material) => cloneMaterial(material))

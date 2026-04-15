@@ -1,6 +1,6 @@
 import styles from './Nav.module.css'
 
-export default function Nav({ lenisRef, hidden = false, onTryIt, light = false }) {
+export default function Nav({ lenisRef, hidden = false, light = false }) {
   const handleClick = (e, target) => {
     e.preventDefault()
     const lenis = lenisRef?.current
@@ -41,11 +41,6 @@ export default function Nav({ lenisRef, hidden = false, onTryIt, light = false }
           <a href="#make-it-your-own" onClick={(e) => handleClick(e, '#make-it-your-own')}>
             Yours
           </a>
-        </li>
-        <li>
-          <button type="button" className={styles.tryItButton} onClick={onTryIt}>
-            Try it
-          </button>
         </li>
       </ul>
     </nav>

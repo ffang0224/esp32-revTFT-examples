@@ -102,9 +102,9 @@ function isExcludedFitNode(node) {
 
 /** Meshes exported under groups named `e_ink_screen`, `e_ink_screen.001`, … in the organized GLB. */
 function isCaseEInkScreenMesh(mesh) {
-  const name = mesh.name ?? ''
-  const parentName = mesh.parent?.name ?? ''
-  return /^e_ink_screen/u.test(name) || /^e_ink_screen/u.test(parentName)
+  const name = (mesh.name ?? '').toLowerCase()
+  const parentName = (mesh.parent?.name ?? '').toLowerCase()
+  return name === 'screen' || parentName === 'screen'
 }
 
 /**
@@ -185,6 +185,11 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
       color: blankColor.clone(),
       transparent: true,
       opacity: 0,
+      side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
+      depthWrite: false,
     })
     screenMat.userData.targetOpacity = 1.0
     screenMaterialRef.current = screenMat
@@ -226,6 +231,7 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
       const meshPartId = getAssemblyGroupId(node)
 
       if (isCaseEInkScreenMesh(node)) {
+        node.renderOrder = 10
         node.material = screenMat
       } else if (Array.isArray(node.material)) {
         node.material = node.material.map((material) => cloneMaterial(material, meshPartId))
@@ -411,6 +417,7 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
       if (flash.elapsed >= 0.08) {
         currentTexRef.current = flash.nextUrl
         screenMaterial.map = textureMap.get(flash.nextUrl) ?? textures[0]
+        if (screenMaterial.map) configureEInkStoryTexture(screenMaterial.map)
         screenMaterial.color.set('#ffffff')
         screenMaterial.needsUpdate = true
         flash.phase = 'idle'
