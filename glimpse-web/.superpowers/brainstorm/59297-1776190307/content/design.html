@@ -1,0 +1,76 @@
+<h2>Material system design</h2>
+<p class="subtitle">All changes are in <code>GlimpseModel.jsx</code> only. One consolidated useEffect replaces the existing two.</p>
+
+<div class="section">
+  <h3>Material groups</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:0.5rem">
+    <thead>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.1)">
+        <th style="text-align:left;padding:0.4rem 0.6rem">Group (node prefix)</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem">Material</th>
+        <th style="text-align:left;padding:0.4rem 0.6rem">Color / key props</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>e_ink_screen</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshBasicMaterial</td>
+        <td style="padding:0.4rem 0.6rem">Existing — unchanged</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>case_upper</code>, <code>case_lower</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshPhysicalMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#7a99bb;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#7a99bb · opacity 0.45 · roughness 0.35 · depthWrite: false</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>board</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#1a7a3c;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#1a7a3c · roughness 0.6 · metalness 0.0</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>neopixel_LED</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#2997ff;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#2997ff · emissive #2997ff · emissiveIntensity 1.5</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>neopixel_strip</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#1a1a22;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#1a1a22 · roughness 0.8</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>pin</code>, <code>screws_</code>, <code>typeC_port</code>, <code>Carabiner_Body</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#b0b8c4;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#b0b8c4 · roughness 0.35 · metalness 0.85 (brushed silver)</td>
+      </tr>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.06)">
+        <td style="padding:0.4rem 0.6rem"><code>battery</code></td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#1c1c1c;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#1c1c1c · roughness 0.9 · metalness 0.0 (matte black)</td>
+      </tr>
+      <tr>
+        <td style="padding:0.4rem 0.6rem">Everything else</td>
+        <td style="padding:0.4rem 0.6rem">MeshStandardMaterial</td>
+        <td style="padding:0.4rem 0.6rem"><span style="display:inline-block;width:12px;height:12px;background:#222228;border-radius:2px;vertical-align:middle;margin-right:4px"></span>#222228 · roughness 0.75 (dark fallback)</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<div class="section">
+  <h3>Architecture change</h3>
+  <p>The existing two <code>useEffect</code>s (screen mat + case mat) are replaced by one consolidated <code>useEffect([scene])</code> that:</p>
+  <ol style="padding-left:1.2rem;line-height:1.8">
+    <li>Creates all 7 materials upfront</li>
+    <li>Calls <code>getMaterialForMesh(node)</code> during <code>scene.traverse</code> to assign the right one</li>
+    <li>Stores all materials in <code>allMaterialsRef</code> (array) for fade-in + disposal</li>
+    <li>Keeps <code>screenMaterialRef</code> for the existing texture/flash logic</li>
+  </ol>
+  <p>The fade-in block in <code>useFrame</code> iterates <code>allMaterialsRef.current</code> to set opacity on all transparent materials simultaneously. Non-transparent materials (LEDs, PCB, metal) skip the fade.</p>
+</div>
+
+<div class="section">
+  <h3>Transparent case rendering</h3>
+  <p>The frosted case uses <code>depthWrite: false</code> — this prevents it from blocking the depth buffer so interior meshes always render through it, regardless of Three.js sort order. <code>side: THREE.DoubleSide</code> ensures inside faces of the shell are also visible.</p>
+</div>
+
+<p class="subtitle" style="margin-top:2rem">Does this design look right? Anything to adjust?</p>

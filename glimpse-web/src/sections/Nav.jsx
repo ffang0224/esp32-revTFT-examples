@@ -1,6 +1,6 @@
 import styles from './Nav.module.css'
 
-export default function Nav({ lenisRef, hidden = false, onTryIt }) {
+export default function Nav({ lenisRef, hidden = false, onTryIt, light = false }) {
   const handleClick = (e, target) => {
     e.preventDefault()
     const lenis = lenisRef?.current
@@ -12,14 +12,38 @@ export default function Nav({ lenisRef, hidden = false, onTryIt }) {
   }
 
   return (
-    <nav className={`${styles.nav} ${hidden ? styles.hidden : ''}`}>
-      <a href="#" className={styles.logo} onClick={e => handleClick(e, '#hero')}>Glimpse</a>
+    <nav className={`${styles.nav} ${light ? styles.light : ''} ${hidden ? styles.hidden : ''}`}>
+      <a href="#" className={styles.logo} onClick={(e) => handleClick(e, '#hero')}>
+        Glimpse
+      </a>
       <ul className={styles.links}>
-        <li><a href="#scroll-story" onClick={e => handleClick(e, '#scroll-story')}>The Device</a></li>
-        <li><a href="#how-it-works" onClick={e => handleClick(e, '#how-it-works')}>How it works</a></li>
-        <li><a href="#specs" onClick={e => handleClick(e, '#specs')}>Specs</a></li>
         <li>
-          <button className={styles.tryItButton} onClick={onTryIt}>
+          <a href="#device-explorer" onClick={(e) => handleClick(e, '#device-explorer')}>
+            Explore
+          </a>
+        </li>
+        <li>
+          <a href="#user-experience" onClick={(e) => handleClick(e, '#user-experience')}>
+            Experience
+          </a>
+        </li>
+        <li>
+          <a href="#renders" onClick={(e) => handleClick(e, '#renders')}>
+            Renders
+          </a>
+        </li>
+        <li>
+          <a href="#specs" onClick={(e) => handleClick(e, '#specs')}>
+            Specs
+          </a>
+        </li>
+        <li>
+          <a href="#make-it-your-own" onClick={(e) => handleClick(e, '#make-it-your-own')}>
+            Yours
+          </a>
+        </li>
+        <li>
+          <button type="button" className={styles.tryItButton} onClick={onTryIt}>
             Try it
           </button>
         </li>

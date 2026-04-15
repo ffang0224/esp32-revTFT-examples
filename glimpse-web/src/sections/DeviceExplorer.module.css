@@ -1,0 +1,166 @@
+.section {
+  position: relative;
+  z-index: 10;
+  background: var(--bg);
+  padding: clamp(4rem, 12vw, 7rem) 6vw;
+  pointer-events: auto;
+}
+
+.inner {
+  max-width: 960px;
+  margin: 0 auto;
+  display: grid;
+  gap: clamp(1.25rem, 3vw, 1.75rem);
+}
+
+.header {
+  display: grid;
+  gap: 0.55rem;
+  max-width: 32rem;
+}
+
+.kicker {
+  font-size: clamp(0.72rem, 1.4vw, 0.82rem);
+  font-weight: 500;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.lede {
+  font-size: 0.78rem;
+  line-height: 1.65;
+  color: var(--text-muted);
+}
+
+.stage {
+  position: relative;
+  width: 100%;
+  border-radius: 0;
+  overflow: hidden;
+  background: rgba(17, 17, 17, 0.04);
+  aspect-ratio: 16 / 10;
+  border: 1px solid var(--border-dim);
+  touch-action: none;
+}
+
+.canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.stage canvas {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.canvasHint {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.55rem;
+  margin: 0;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(17, 17, 17, 0.38);
+  pointer-events: none;
+  user-select: none;
+}
+
+.toolbar {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.toolbarRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.toolbarLabel {
+  font-size: 0.58rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.textAction {
+  border: none;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-soft);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: color 0.2s;
+}
+
+.textAction:hover {
+  color: var(--text);
+}
+
+.textSpacer {
+  font-size: 0.62rem;
+  visibility: hidden;
+}
+
+.toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.5rem;
+}
+
+.pill {
+  border: 1px solid var(--border-dim);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.42rem 0.75rem;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    color 0.2s,
+    border-color 0.2s;
+}
+
+.pillOn {
+  background: rgba(17, 17, 17, 0.06);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.pillOff {
+  opacity: 0.45;
+}
+
+.pill:hover {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .toggles {
+    gap: 0.4rem;
+  }
+
+  .pill {
+    font-size: 0.58rem;
+    padding: 0.38rem 0.65rem;
+  }
+}

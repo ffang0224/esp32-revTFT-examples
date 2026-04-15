@@ -1,0 +1,26 @@
+<h2>How should the e-ink screen transition between images?</h2>
+<p class="subtitle">Currently it's an instant swap. What should the transition feel like?</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Dissolve / opacity crossfade</h3>
+      <p>The new image fades in over the old one over ~0.4s. Smooth and invisible — feels like the screen is just "updating."</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>E-ink flash → reveal</h3>
+      <p>A brief white flash (like real e-ink displays do when refreshing), then the new image appears. Authentic to the hardware behavior.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Wipe / scan line</h3>
+      <p>New image sweeps in from top to bottom, mimicking a slow e-ink refresh scan. Most literal simulation of actual e-ink behavior.</p>
+    </div>
+  </div>
+</div>

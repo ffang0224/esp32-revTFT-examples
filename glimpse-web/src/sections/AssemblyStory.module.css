@@ -1,0 +1,39 @@
+.section {
+  position: relative;
+  height: 220vh;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.viewport {
+  position: sticky;
+  top: 0;
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 3.5vh 2vw;
+  background: var(--bg);
+}
+
+.diagram {
+  display: block;
+  width: min(94vw, 1480px);
+  max-height: 92vh;
+  object-fit: contain;
+  box-shadow: none;
+}
+
+@media (max-width: 900px) {
+  .section {
+    height: 170vh;
+  }
+
+  .viewport {
+    padding: 2vh 2vw;
+  }
+
+  .diagram {
+    width: 98vw;
+    max-height: 88vh;
+  }
+}

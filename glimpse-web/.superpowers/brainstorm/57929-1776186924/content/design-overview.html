@@ -1,0 +1,24 @@
+<h2>Design: Glimpse Web 3D Experience Polish</h2>
+<p class="subtitle">Four targeted changes — each self-contained. Scope: GlimpseModel.jsx, App.jsx (canvas + Suspense), and a new ModelLoader component.</p>
+
+<div class="section">
+  <h3>1 — Model swap + mesh detection fix</h3>
+  <p>Change the import in <code>GlimpseModel.jsx</code> from <code>case.glb</code> → <code>casefinal.glb</code>. Update <code>isCaseEInkScreenMesh</code> to check the node's own name in addition to its parent's name — in the new model, <code>e_ink_screen.*</code> nodes are leaf meshes, not parent groups. All other new mesh types (board, pin, neopixel_*, carabiner, etc.) fall through to the dark matte fallback material.</p>
+</div>
+
+<div class="section">
+  <h3>2 — Silhouette skeleton loader</h3>
+  <p>Replace the bare <code>Suspense fallback={null}</code> in App.jsx with a <code>&lt;ModelSkeleton&gt;</code> component rendered inside the Canvas. It's a simple dark box geometry (matching the device's approximate proportions) with a semi-transparent dark material — no texture, just shape. When the real model finishes loading, the skeleton fades out (opacity 0) over ~400ms via useFrame, then unmounts. The real model fades in simultaneously from opacity 0 → 1 over the same duration.</p>
+</div>
+
+<div class="section">
+  <h3>3 — HDRI environment + contact shadow</h3>
+  <p>Add <code>&lt;Environment preset="studio" /&gt;</code> from @react-three/drei inside the Canvas. This replaces purely directional lighting with a physically-based environment map — the dark matte case picks up subtle ambient reflections that read as premium without being shiny. Keep the existing directional lights but reduce their intensities by ~30% to avoid over-brightening. Add <code>&lt;ContactShadows /&gt;</code> (opacity 0.5, blur 2.5, far 3) directly below the model's rest position — the floating bob animation will move the model away from the shadow, giving a natural depth cue.</p>
+</div>
+
+<div class="section">
+  <h3>4 — E-ink flash transition</h3>
+  <p>In <code>GlimpseModel.jsx</code>'s <code>useFrame</code>, when a texture change is detected (currentTexRef !== targetUrl), instead of swapping immediately: (1) flash the screen material color to <code>#ffffff</code> over ~80ms, (2) swap the texture at peak white, (3) fade back to normal over ~120ms. Implemented as a small state machine with a <code>flashRef</code> tracking progress and phase (idle / flash-in / swap / flash-out). No external dependencies needed — runs entirely in useFrame.</p>
+</div>
+
+<p class="subtitle" style="margin-top:2rem">Does this design look right? Any section you want to adjust before I write the spec?</p>

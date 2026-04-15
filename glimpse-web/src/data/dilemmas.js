@@ -1,11 +1,17 @@
-import { DEMO_IMAGES } from '../demoImages'
 import { normalizeDilemma, pickRandomStory } from './dilemmaData'
 
 const dilemmaModules = import.meta.glob('../../dilemmas/dilemma-*.json', { eager: true })
 const imageModules = import.meta.glob('../../dilemmas/*.{png,jpg,jpeg,webp}', { eager: true, import: 'default' })
 
 function resolveImage(fileName) {
-  return imageModules[`../../dilemmas/${fileName}`] ?? DEMO_IMAGES[0]
+  const key = `../../dilemmas/${fileName}`
+  const resolved = imageModules[key]
+  if (!resolved) {
+    throw new Error(
+      `Missing dilemma image "${fileName}". Add it under glimpse-web/dilemmas/ (referenced from JSON).`,
+    )
+  }
+  return resolved
 }
 
 export const DILEMMAS = Object.entries(dilemmaModules)
@@ -19,11 +25,9 @@ export const DILEMMAS = Object.entries(dilemmaModules)
   })
   .sort((left, right) => left.id.localeCompare(right.id))
 
+/** URLs for e-ink textures: only art shipped under glimpse-web/dilemmas/ (see JSON `image` fields). */
 export const STORY_SCREEN_IMAGES = [
-  ...new Set([
-    ...DEMO_IMAGES,
-    ...DILEMMAS.flatMap((dilemma) => dilemma.prophecies.map((prophecy) => prophecy.imageUrl)),
-  ]),
+  ...new Set(DILEMMAS.flatMap((dilemma) => dilemma.prophecies.map((prophecy) => prophecy.imageUrl))),
 ]
 
 export function getRandomStory(randomFn = Math.random) {

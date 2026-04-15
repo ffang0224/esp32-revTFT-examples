@@ -1,15 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,500;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&display=swap');
 
 :root {
-  --bg:           #000000;
-  --bg-mid:       #0a0a0a;
-  --text:         #f7f8fb;
-  --text-dim:     rgba(247, 248, 251, 0.84);
-  --text-muted:   rgba(247, 248, 251, 0.66);
+  --bg:           rgb(218, 218, 218);
+  --bg-mid:       rgb(218, 218, 218);
+  --text:         #111111;
+  --text-dim:     rgba(17, 17, 17, 0.82);
+  --text-muted:   rgba(17, 17, 17, 0.6);
   --accent:       #2997ff;
-  --accent-soft:  rgba(122, 194, 255, 0.9);
-  --border:       rgba(255, 255, 255, 0.2);
-  --border-dim:   rgba(255, 255, 255, 0.14);
+  --accent-soft:  rgba(41, 151, 255, 0.78);
+  --border:       rgba(17, 17, 17, 0.18);
+  --border-dim:   rgba(17, 17, 17, 0.12);
 }
 
 *, *::before, *::after {
@@ -25,7 +25,7 @@ html {
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Lora', Georgia, serif;
+  font-family: 'DM Mono', ui-monospace, monospace;
   overflow-x: hidden;
   cursor: auto;
 }
@@ -59,3 +59,4 @@ body::after {
   0%, 100% { opacity: 0.2; }
   50%       { opacity: 1; }
 }
+

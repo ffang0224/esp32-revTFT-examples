@@ -1,20 +1,23 @@
+/**
+ * Product / hero lighting — soft studio reference: bright even fill, gentle top‑right key,
+ * mild bounce from below. (Used only in Hero.)
+ */
 export default function Lights() {
   return (
     <>
-      {/* Reduced ambient — dark case needs shadow depth */}
-      <ambientLight color={0xfff5e6} intensity={0.9} />
+      <ambientLight color={0xfff9f5} intensity={0.36} />
 
-      {/* Warm key light from front-right — reduced for HDRI balance */}
-      <directionalLight color={0xfff0d6} intensity={1.5} position={[4, 8, 6]} />
+      <hemisphereLight color={0xffffff} groundColor={0xb8b8c0} intensity={0.32} />
 
-      {/* Soft warm fill from left */}
-      <directionalLight color={0xc4a882} intensity={0.8} position={[-4, 2, -3]} />
+      {/* Primary key — top-right (reference), kept moderate to avoid clipping whites */}
+      <directionalLight color={0xfff6ee} intensity={0.72} position={[4.8, 6.2, 3.6]} />
 
-      {/* Cool blue rim from behind — reduced for HDRI balance */}
-      <directionalLight color={0x2997ff} intensity={1.0} position={[-3, 1, -8]} />
+      {/* Front fill — defines dark outer ring + text readability without blowing mid-tones */}
+      <directionalLight color={0xffffff} intensity={0.3} position={[0.2, 2.0, 9.0]} />
 
-      {/* Subtle warm under-bounce */}
-      <directionalLight color={0xffeedd} intensity={0.5} position={[0, -4, -6]} />
+      <directionalLight color={0xe8eef8} intensity={0.22} position={[-5.5, 3.0, -2.0]} />
+
+      <directionalLight color={0xffeee6} intensity={0.1} position={[0.5, -4.5, 2.0]} />
     </>
   )
 }

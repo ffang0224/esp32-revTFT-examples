@@ -10,13 +10,19 @@ import styles from './DilemmaStory.module.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const MODEL_STAGES = [
-  { modelX: 4.3, modelZ: 0.0, rotY: Math.PI - 0.04 },
-  { modelX: 4.0, modelZ: 0.18, rotY: Math.PI + 0.08 },
-  { modelX: 3.65, modelZ: 0.32, rotY: Math.PI + 0.2 },
-  { modelX: 3.2, modelZ: 0.12, rotY: Math.PI + 0.14 },
-  { modelX: 2.95, modelZ: -0.02, rotY: Math.PI + 0.04 },
-]
+const HIDDEN_MODEL_POSE = {
+  modelX: 0.6,
+  modelY: -9.8,
+  modelZ: -0.5,
+  rotY: Math.PI + 0.08,
+}
+
+const REVEAL_MODEL_POSE = {
+  modelX: 0,
+  modelY: -0.7,
+  modelZ: 0.08,
+  rotY: Math.PI,
+}
 
 const STAGE_LABELS = [
   'Typing dilemma',
@@ -25,10 +31,6 @@ const STAGE_LABELS = [
   'Sending',
   'Revealing prophecy',
 ]
-
-function lerp(start, end, amount) {
-  return start + (end - start) * amount
-}
 
 export default function DilemmaStory() {
   const sectionRef = useRef(null)
@@ -52,24 +54,33 @@ export default function DilemmaStory() {
         const nextFrame = getStoryFrame(self.progress, story.dilemma, story.prophecy)
         setFrame(nextFrame)
 
-        const raw = self.progress * (MODEL_STAGES.length - 1)
-        const lower = Math.floor(raw)
-        const upper = Math.min(lower + 1, MODEL_STAGES.length - 1)
-        const amount = raw - lower
-
-        scrollState.targetX = lerp(MODEL_STAGES[lower].modelX, MODEL_STAGES[upper].modelX, amount)
-        scrollState.targetZ = lerp(MODEL_STAGES[lower].modelZ, MODEL_STAGES[upper].modelZ, amount)
-        scrollState.targetRotY = lerp(MODEL_STAGES[lower].rotY, MODEL_STAGES[upper].rotY, amount)
-        scrollState.screenImage = nextFrame.showProphecy ? story.prophecy.imageUrl : null
-        scrollState.screenVisible = nextFrame.showProphecy
+        scrollState.targetX = HIDDEN_MODEL_POSE.modelX
+        scrollState.targetY = HIDDEN_MODEL_POSE.modelY
+        scrollState.targetZ = HIDDEN_MODEL_POSE.modelZ
+        scrollState.targetRotY = HIDDEN_MODEL_POSE.rotY
+        scrollState.screenImage = null
+        scrollState.screenVisible = false
+        scrollState.modelVisible = false
       },
       onEnter: () => {
         setDotsVisible(true)
+        scrollState.targetX = HIDDEN_MODEL_POSE.modelX
+        scrollState.targetY = HIDDEN_MODEL_POSE.modelY
+        scrollState.targetZ = HIDDEN_MODEL_POSE.modelZ
+        scrollState.targetRotY = HIDDEN_MODEL_POSE.rotY
+        scrollState.screenVisible = false
+        scrollState.modelVisible = false
       },
       onLeave: () => {
         setDotsVisible(false)
         scrollState.screenImage = null
         scrollState.screenVisible = true
+        scrollState.screenIndex = 0
+        scrollState.targetX = REVEAL_MODEL_POSE.modelX
+        scrollState.targetY = REVEAL_MODEL_POSE.modelY
+        scrollState.targetZ = REVEAL_MODEL_POSE.modelZ
+        scrollState.targetRotY = REVEAL_MODEL_POSE.rotY
+        scrollState.modelVisible = true
       },
       onEnterBack: () => {
         setDotsVisible(true)
@@ -78,12 +89,14 @@ export default function DilemmaStory() {
         setDotsVisible(false)
         setStoryProgress(0)
         setFrame(getStoryFrame(0, story.dilemma, story.prophecy))
-        scrollState.targetX = MODEL_STAGES[0].modelX
-        scrollState.targetZ = MODEL_STAGES[0].modelZ
-        scrollState.targetRotY = MODEL_STAGES[0].rotY
+        scrollState.targetX = 0
+        scrollState.targetY = -1.9
+        scrollState.targetZ = 0.08
+        scrollState.targetRotY = Math.PI
         scrollState.screenImage = null
         scrollState.screenVisible = false
         scrollState.screenIndex = 0
+        scrollState.modelVisible = true
       },
     })
 
@@ -175,11 +188,6 @@ export default function DilemmaStory() {
             </div>
           </div>
 
-          <div className={styles.deviceColumn}>
-            <div className={styles.deviceStage}>
-              <div className={styles.deviceFrame} />
-            </div>
-          </div>
         </div>
       </section>
       <StageDots active={frame.activeStage} count={5} visible={dotsVisible} variant="dilemma" />

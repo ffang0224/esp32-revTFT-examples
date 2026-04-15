@@ -1,0 +1,33 @@
+<h2>What should users see while the 3D model loads?</h2>
+<p class="subtitle">The model currently pops in suddenly. Pick the loading treatment that fits the Glimpse aesthetic.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Centered spinner / pulse</h3>
+      <p>A minimal animated dot or ring in the center of the canvas. Clean, unobtrusive. Disappears once the model is ready.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Silhouette skeleton</h3>
+      <p>A dark ghost outline of the device shape fades in first, then dissolves into the real model. Gives spatial context while loading.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Fade-in on ready</h3>
+      <p>Canvas starts transparent (or with a subtle gradient). When the model is fully loaded it fades in smoothly over ~0.6s. No placeholder — just a clean appearance.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="d" onclick="toggleSelect(this)">
+    <div class="letter">D</div>
+    <div class="content">
+      <h3>Full-page loader gate</h3>
+      <p>A brief full-screen overlay (matching site background) with a logo or wordmark and progress bar. Lifts away once assets are ready. Most branded, most control.</p>
+    </div>
+  </div>
+</div>

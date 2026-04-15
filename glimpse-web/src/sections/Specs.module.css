@@ -2,55 +2,27 @@
   position: relative;
   z-index: 10;
   background: var(--bg);
-  padding: 9rem 6vw;
+  padding: clamp(3.5rem, 10vw, 6rem) 6vw;
   pointer-events: none;
 }
 
 .inner {
-  max-width: 820px;
+  max-width: 1100px;
   margin: 0 auto;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 5rem;
-  align-items: start;
 }
 
-.left {}
-
-.heading {
-  font-family: 'Playfair Display', serif;
-  font-size: clamp(1.8rem, 3vw, 2.5rem);
-  line-height: 1.2;
-  margin-bottom: 1.2rem;
-  color: var(--text);
+.diagram {
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+  background: transparent;
 }
 
-.sub {
-  font-size: 0.85rem;
-  line-height: 1.85;
-  color: var(--text-muted);
-}
-
-.list {
-  list-style: none;
-}
-
-.row {
-  display: flex;
-  justify-content: space-between;
-  padding: 0.85rem 0;
-  border-bottom: 1px solid var(--border-dim);
-  font-size: 0.82rem;
-}
-
-.row:first-child {
-  border-top: 1px solid var(--border-dim);
-}
-
-.rowLabel {
-  color: var(--accent-soft);
-}
-
-.rowValue {
-  color: var(--text);
+.diagramImg {
+  display: block;
+  width: 100%;
+  height: auto;
+  vertical-align: middle;
 }

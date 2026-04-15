@@ -1,0 +1,29 @@
+<h2>Three approaches to the material system</h2>
+<p class="subtitle">All replace the single dark fallback with per-group materials. They differ in structure.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Name-prefix map — <span style="font-weight:normal;opacity:0.6">Recommended</span></h3>
+      <p>A single <code>getMaterialForMesh(node)</code> function with an ordered list of <code>[regex, material]</code> pairs. One traversal assigns every mesh. Adding a new material group = one line in the list. Replaces the existing two-useEffect pattern with one consolidated useEffect.</p>
+      <p><strong>Trade-off:</strong> Single useEffect is harder to split if one material needs special lifecycle handling (e.g., animated NeoPixels). But for static materials this is cleanest.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Separate useEffect per group</h3>
+      <p>Keep the existing pattern — one useEffect per material type. Clear separation, easy to reason about each group in isolation. Currently there are 2 effects; this would grow to ~6.</p>
+      <p><strong>Trade-off:</strong> 6 traversals of a 300-mesh scene instead of 1. Verbose but very readable.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Material config object + single traversal</h3>
+      <p>Same as A but the config lives in a separate <code>modelMaterials.js</code> file as exported constants. <code>GlimpseModel.jsx</code> stays lean; materials are tunable without touching the component logic.</p>
+      <p><strong>Trade-off:</strong> Extra file for a modest benefit. Worthwhile if material values will be tweaked frequently (e.g., color tuning).</p>
+    </div>
+  </div>
+</div>

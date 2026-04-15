@@ -1,0 +1,147 @@
+- generic [ref=e2]:
+  - navigation:
+    - link "Glimpse":
+      - /url: "#"
+    - list:
+      - listitem:
+        - link "The Device":
+          - /url: "#scroll-story"
+      - listitem:
+        - link "How it works":
+          - /url: "#how-it-works"
+      - listitem:
+        - link "Specs":
+          - /url: "#specs"
+      - listitem:
+        - button "Try it"
+  - main:
+    - generic:
+      - generic:
+        - heading "Glimpse" [level=1]
+        - paragraph: Glimpse is for moments of choice, when logic alone isn't enough. Take a glimpse into a possible future and feel which one is right.
+    - generic:
+      - 'region "Glimpse story: guided dilemma, values, and device reveal"':
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic: 9:41
+              - generic:
+                - paragraph: What dilemma do you want to solve?
+                - generic:
+                  - paragraph
+              - generic:
+                - generic:
+                  - generic:
+                    - generic: Q
+                    - generic: W
+                    - generic: E
+                    - generic: R
+                    - generic: T
+                    - generic: "Y"
+                    - generic: U
+                    - generic: I
+                    - generic: O
+                    - generic: P
+                  - generic:
+                    - generic: A
+                    - generic: S
+                    - generic: D
+                    - generic: F
+                    - generic: G
+                    - generic: H
+                    - generic: J
+                    - generic: K
+                    - generic: L
+                  - generic:
+                    - generic: ⇧
+                    - generic: Z
+                    - generic: X
+                    - generic: C
+                    - generic: V
+                    - generic: B
+                    - generic: "N"
+                    - generic: M
+                    - generic: ⌫
+                  - generic:
+                    - generic: "123"
+                    - generic: Go
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic: "01"
+            - generic: Your Perspective
+            - generic: Your personality shapes everything around you. Glimpse reminds you of that, daily.
+          - generic:
+            - generic: "02"
+            - generic: Patient Wisdom
+            - generic: Some truths need time. Glimpse holds them quietly until you're ready to hear them.
+          - generic:
+            - generic: "03"
+            - generic: Chosen Suffering
+            - generic: A gentle nudge for the days you forget that most pain is optional.
+    - generic:
+      - paragraph: How it works
+      - generic:
+        - generic:
+          - generic:
+            - generic: "01"
+            - generic: 📱
+          - heading "Choose a thought" [level=3]
+          - paragraph: Open the app, pick a mode — a dilemma to sit with, or a prophecy to carry. Type your prompt.
+        - generic:
+          - generic:
+            - generic: "02"
+            - generic: 📡
+          - heading "Sent over BLE" [level=3]
+          - paragraph: Your phone sends the prompt wirelessly to Glimpse via Bluetooth Low Energy. No cloud, no account.
+        - generic:
+          - generic:
+            - generic: "03"
+            - generic: 🖼
+          - heading "Rendered in ink" [level=3]
+          - paragraph: The ESP32 processes the image and writes it to the e-ink display. It stays there, powerlessly, until you change it.
+    - generic:
+      - generic:
+        - generic:
+          - heading "Small device, clear specs." [level=2]:
+            - text: Small device,
+            - text: clear specs.
+          - paragraph: No bloat. No subscription. Open hardware doing exactly what it promises — a single quiet image, held in ink.
+        - list:
+          - listitem:
+            - generic: Display
+            - generic: 2.13" e-Ink, 250×122
+          - listitem:
+            - generic: MCU
+            - generic: ESP32 Feather
+          - listitem:
+            - generic: Connectivity
+            - generic: BLE 5.0 + Wi-Fi
+          - listitem:
+            - generic: Power
+            - generic: LiPo battery
+          - listitem:
+            - generic: Refresh
+            - generic: ~6s full refresh
+          - listitem:
+            - generic: Case
+            - generic: 3D printed PLA
+          - listitem:
+            - generic: Open source
+            - generic: Hardware & firmware
+    - generic [ref=e7]:
+      - generic [ref=e8]: Glimpse
+      - generic [ref=e9]:
+        - text: Open Source · 2025 ·
+        - link "GitHub ↗" [ref=e10] [cursor=pointer]:
+          - /url: https://github.com/ffang0224/esp32-revTFT-examples
+  - generic:
+    - button "Close demo" [ref=e11]: ×
+    - generic [ref=e12]:
+      - generic [ref=e15]:
+        - paragraph [ref=e16]: Dilemma
+        - textbox "Type a thought to send to your Glimpse…" [ref=e17]
+        - button "Send to Glimpse →" [disabled] [ref=e18]
+      - paragraph [ref=e20]: ⌘ / Ctrl + Enter to send

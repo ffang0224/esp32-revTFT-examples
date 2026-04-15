@@ -7,11 +7,16 @@ import styles from './ScrollStory.module.css'
 
 gsap.registerPlugin(ScrollTrigger)
 
-const HERO_X    = 4.0
+const ENTRY_POSE = {
+  modelX: 0,
+  modelY: -0.7,
+  modelZ: 0.08,
+  rotY: Math.PI,
+}
 const STAGES = [
-  { modelX: -3.5, modelZ: 0,    rotY: Math.PI,        tex: 0 },
-  { modelX: -3.0, modelZ: 0.3,  rotY: Math.PI + 0.25, tex: 1 },
-  { modelX: -4.0, modelZ: -0.3, rotY: Math.PI - 0.25, tex: 2 },
+  { modelX: 0, modelY: -0.7, modelZ: 0.08, rotY: Math.PI + 0.02, tex: 0 },
+  { modelX: 0.08, modelY: -0.62, modelZ: 0.14, rotY: Math.PI + 0.08, tex: 1 },
+  { modelX: -0.06, modelY: -0.68, modelZ: 0.04, rotY: Math.PI - 0.04, tex: 2 },
 ]
 
 const LABELS = [
@@ -55,6 +60,7 @@ export default function ScrollStory() {
         scrollState.screenIndex = STAGES[stageIdx].tex
         scrollState.screenImage = null
         scrollState.screenVisible = true
+        scrollState.modelVisible = true
 
         // Interpolate model position & rotation through stages
         const raw = progress * (STAGES.length - 1)
@@ -63,36 +69,46 @@ export default function ScrollStory() {
         const t   = raw - lo
 
         const stageX    = STAGES[lo].modelX + (STAGES[hi].modelX - STAGES[lo].modelX) * t
+        const stageY    = STAGES[lo].modelY + (STAGES[hi].modelY - STAGES[lo].modelY) * t
         const stageZ    = STAGES[lo].modelZ + (STAGES[hi].modelZ - STAGES[lo].modelZ) * t
         const stageRotY = STAGES[lo].rotY   + (STAGES[hi].rotY   - STAGES[lo].rotY)   * t
 
         // Entry blend: fast over first 25%
         const entry = Math.min(1, progress * 4)
 
-        scrollState.targetX    = HERO_X + (stageX    - HERO_X) * entry
-        scrollState.targetZ    = stageZ * entry
-        scrollState.targetRotY = Math.PI + (stageRotY - Math.PI) * entry
+        scrollState.targetX    = ENTRY_POSE.modelX + (stageX - ENTRY_POSE.modelX) * entry
+        scrollState.targetY    = ENTRY_POSE.modelY + (stageY - ENTRY_POSE.modelY) * entry
+        scrollState.targetZ    = ENTRY_POSE.modelZ + (stageZ - ENTRY_POSE.modelZ) * entry
+        scrollState.targetRotY = ENTRY_POSE.rotY + (stageRotY - ENTRY_POSE.rotY) * entry
       },
       onEnter: () => {
         setDotsVisible(true)
-        scrollState.targetX = HERO_X
+        scrollState.targetX = ENTRY_POSE.modelX
+        scrollState.targetY = ENTRY_POSE.modelY
+        scrollState.targetZ = ENTRY_POSE.modelZ
+        scrollState.targetRotY = ENTRY_POSE.rotY
+        scrollState.modelVisible = true
       },
       onLeave: () => {
         setDotsVisible(false)
         // Return model toward center
         scrollState.targetX    = 0
-        scrollState.targetZ    = 0
+        scrollState.targetY    = -1.9
+        scrollState.targetZ    = 0.08
         scrollState.targetRotY = Math.PI
+        scrollState.modelVisible = true
       },
       onEnterBack: () => setDotsVisible(true),
       onLeaveBack: () => {
         setDotsVisible(false)
-        scrollState.targetX    = HERO_X
-        scrollState.targetZ    = 0
-        scrollState.targetRotY = Math.PI
+        scrollState.targetX    = 0.6
+        scrollState.targetY    = -9.8
+        scrollState.targetZ    = -0.5
+        scrollState.targetRotY = Math.PI + 0.08
         scrollState.screenIndex = 0
         scrollState.screenImage = null
-        scrollState.screenVisible = true
+        scrollState.screenVisible = false
+        scrollState.modelVisible = false
       },
     })
 

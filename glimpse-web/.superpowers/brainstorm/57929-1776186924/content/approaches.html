@@ -1,0 +1,32 @@
+<h2>Three approaches to the upgrade</h2>
+<p class="subtitle">All three include the model swap, skeleton loader, e-ink flash, and HDRI + contact shadow. They differ in scope and material richness.</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Targeted polish <span style="font-size:0.8em;opacity:0.6;font-weight:normal">— Recommended</span></h3>
+      <p><strong>What:</strong> Swap to casefinal.glb, fix mesh detection (node names changed slightly), apply HDRI environment + contact shadow, silhouette skeleton on load, e-ink flash transition.</p>
+      <p><strong>Materials:</strong> Keep the two-material system (dark matte case + e-ink screen). Extend it to handle the new mesh groups (board, pins, carabiner) with a single fallback dark material.</p>
+      <p><strong>Trade-off:</strong> Fastest, lowest risk. The rich internal geometry (NeoPixels, PCB, carabiner) is visible but not specially highlighted — it all reads as dark hardware, which is honest to the device aesthetic.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Rich material system</h3>
+      <p><strong>What:</strong> Everything in A, plus per-group material treatment for the new mesh types: metallic pins/screws, PCB green for board nodes, emissive NeoPixel LEDs with a subtle glow, metallic carabiner.</p>
+      <p><strong>Materials:</strong> 5–6 distinct materials keyed by node name prefix. The NeoPixels pulse gently in useFrame — a living detail visible on close inspection.</p>
+      <p><strong>Trade-off:</strong> More visual depth and authenticity, but adds complexity to GlimpseModel.jsx and requires tuning each material against the HDRI. ~2× the implementation work.</p>
+    </div>
+  </div>
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>Custom e-ink shader</h3>
+      <p><strong>What:</strong> Everything in A, but instead of a simple color flash for the e-ink transition, writes a custom ShaderMaterial that does a real scan-line wipe + white flash in GLSL — looks exactly like a hardware e-ink refresh.</p>
+      <p><strong>Materials:</strong> Same two-material system as A, but the screen material becomes a custom shader with uniforms for progress, old texture, and new texture.</p>
+      <p><strong>Trade-off:</strong> The most authentic screen transition, but GLSL shader adds fragility and complexity for a subtlety most users won't consciously notice. Best if the transition is a core part of the brand story.</p>
+    </div>
+  </div>
+</div>
