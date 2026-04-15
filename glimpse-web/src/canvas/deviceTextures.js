@@ -148,6 +148,7 @@ export function getForcedMeshTextureProfile(meshName) {
   if (n.startsWith('neopixel_strip')) return 'ledDiffuser'
   if (n.startsWith('neopixel_led')) return 'ledEmitter'
   if (n.includes('screw')) return 'blackPlastic'
+  if (n.includes('pin')) return 'brushedAluminum'
   return null
 }
 
