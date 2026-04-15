@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { ContactShadows, Environment, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -6,13 +6,10 @@ import * as THREE from 'three'
 import GlimpseExplorerModel from '../canvas/GlimpseExplorerModel'
 import ModelSkeleton from '../canvas/ModelSkeleton'
 import Lights from '../canvas/Lights'
-import {
-  EXPLORER_PART_TOGGLES,
-  createDefaultExplorerVisibility,
-} from '../canvas/explorerPartGroups'
+import { createDefaultExplorerVisibility } from '../canvas/explorerPartGroups'
 import styles from './DeviceExplorer.module.css'
 
-function ExplorerScene({ partVisibility, caseTone }) {
+function ExplorerScene({ partVisibility, caseTone, controlsEnabled }) {
   const invalidate = useThree((s) => s.invalidate)
 
   return (
@@ -30,6 +27,7 @@ function ExplorerScene({ partVisibility, caseTone }) {
       />
       <OrbitControls
         makeDefault
+        enabled={controlsEnabled}
         enableDamping
         dampingFactor={0.08}
         rotateSpeed={0.88}
@@ -48,22 +46,17 @@ function ExplorerScene({ partVisibility, caseTone }) {
 
 export default function DeviceExplorer() {
   const stageRef = useRef(null)
-  const defaultVis = useMemo(() => createDefaultExplorerVisibility(), [])
-  const [partVisibility, setPartVisibility] = useState(defaultVis)
-  const [caseTone, setCaseTone] = useState('dark')
+  const [showCase, setShowCase] = useState(true)
+  const [showInternals, setShowInternals] = useState(true)
+  const [controlsEnabled, setControlsEnabled] = useState(false)
 
-  const togglePart = useCallback((id) => {
-    setPartVisibility((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
-
-  const showAll = useCallback(() => {
-    setPartVisibility(createDefaultExplorerVisibility())
-  }, [])
-
-  const anyHidden = useMemo(
-    () => EXPLORER_PART_TOGGLES.some((p) => partVisibility[p.id] === false),
-    [partVisibility],
-  )
+  const partVisibility = useMemo(() => {
+    const visibility = createDefaultExplorerVisibility()
+    Object.keys(visibility).forEach((id) => {
+      visibility[id] = id === 'case' ? showCase : showInternals
+    })
+    return visibility
+  }, [showCase, showInternals])
 
   useEffect(() => {
     const stage = stageRef.current
@@ -71,6 +64,8 @@ export default function DeviceExplorer() {
 
     const stopStageWheelScroll = (event) => {
       event.preventDefault()
+      event.stopPropagation()
+      setControlsEnabled(true)
     }
 
     stage.addEventListener('wheel', stopStageWheelScroll, { passive: false })
@@ -92,6 +87,8 @@ export default function DeviceExplorer() {
           className={styles.stage}
           role="region"
           aria-label="Interactive 3D model — drag to rotate"
+          onPointerEnter={() => setControlsEnabled(true)}
+          onPointerDown={() => setControlsEnabled(true)}
         >
           <Canvas
             className={styles.canvas}
@@ -111,68 +108,48 @@ export default function DeviceExplorer() {
             }}
           >
             <Suspense fallback={<ModelSkeleton />}>
-              <ExplorerScene partVisibility={partVisibility} caseTone={caseTone} />
+              <ExplorerScene
+                partVisibility={partVisibility}
+                caseTone="dark"
+                controlsEnabled={controlsEnabled}
+              />
             </Suspense>
           </Canvas>
           <p className={styles.canvasHint}>Drag to orbit · scroll to zoom</p>
         </div>
 
-        <div className={styles.toolbar}>
+        <div
+          className={styles.toolbar}
+          onPointerEnter={() => setControlsEnabled(false)}
+          onPointerDown={() => setControlsEnabled(false)}
+          onFocusCapture={() => setControlsEnabled(false)}
+        >
           <div className={styles.toolbarRow}>
-            <span className={styles.toolbarLabel} id="explorer-tone-label">
-              Case tone
+            <span className={styles.toolbarLabel} id="explorer-visibility-label">
+              Visibility
             </span>
-          </div>
-          <div className={styles.toggles} role="group" aria-labelledby="explorer-tone-label">
-            <button
-              type="button"
-              className={`${styles.pill} ${caseTone === 'light' ? styles.pillOn : styles.pillOff}`}
-              aria-pressed={caseTone === 'light'}
-              onClick={() => setCaseTone('light')}
-            >
-              Light
-            </button>
-            <button
-              type="button"
-              className={`${styles.pill} ${caseTone === 'dark' ? styles.pillOn : styles.pillOff}`}
-              aria-pressed={caseTone === 'dark'}
-              onClick={() => setCaseTone('dark')}
-            >
-              Dark
-            </button>
-          </div>
-
-          <div className={styles.toolbarRow}>
-            <span className={styles.toolbarLabel} id="explorer-parts-label">
-              Parts
-            </span>
-            {anyHidden ? (
-              <button type="button" className={styles.textAction} onClick={showAll}>
-                Show all
-              </button>
-            ) : (
-              <span className={styles.textSpacer} aria-hidden="true" />
-            )}
           </div>
           <div
             className={styles.toggles}
             role="group"
-            aria-labelledby="explorer-parts-label"
+            aria-labelledby="explorer-visibility-label"
           >
-            {EXPLORER_PART_TOGGLES.map(({ id, label }) => {
-              const on = partVisibility[id] !== false
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  className={`${styles.pill} ${on ? styles.pillOn : styles.pillOff}`}
-                  aria-pressed={on}
-                  onClick={() => togglePart(id)}
-                >
-                  {label}
-                </button>
-              )
-            })}
+            <button
+              type="button"
+              className={`${styles.pill} ${showCase ? styles.pillOn : styles.pillOff}`}
+              aria-pressed={showCase}
+              onClick={() => setShowCase((prev) => !prev)}
+            >
+              Case
+            </button>
+            <button
+              type="button"
+              className={`${styles.pill} ${showInternals ? styles.pillOn : styles.pillOff}`}
+              aria-pressed={showInternals}
+              onClick={() => setShowInternals((prev) => !prev)}
+            >
+              Internals
+            </button>
           </div>
         </div>
       </div>

@@ -75,6 +75,8 @@
 .toolbar {
   position: relative;
   z-index: 2;
+  isolation: isolate;
+  pointer-events: auto;
   display: grid;
   gap: 0.65rem;
 }

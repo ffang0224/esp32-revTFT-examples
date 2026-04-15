@@ -24,12 +24,6 @@ import untitledNormal from '../../textures/Untitled materialeg_Normal.jpg?url'
 import untitledRough from '../../textures/Untitled materialeg_Roughness.jpg?url'
 import untitledMetal from '../../textures/Untitled materialeg_Metallic.jpg?url'
 
-import ledBase from '../../textures/Led_strip_BaseColor.png?url'
-import ledNormal from '../../textures/Led_strip_Normal.png?url'
-import ledMetal from '../../textures/Led_strip_Metallic.png?url'
-import ledRough from '../../textures/Led_strip_Roughness.png?url'
-import ledAlpha from '../../textures/Led_strip_Alpha.png?url'
-
 import mat6 from '../../textures/6-1.png?url'
 
 /** Keys must match `useTexture` object keys in GlimpseModel. */
@@ -52,12 +46,17 @@ export const DEVICE_TEXTURE_URLS = {
   untitledNormal,
   untitledRough,
   untitledMetal,
-  ledBase,
-  ledNormal,
-  ledMetal,
-  ledRough,
-  ledAlpha,
   mat6,
+}
+
+const loggedUnmatchedMaterialNames = new Set()
+
+function logUnmatchedMaterialName(materialName) {
+  if (!import.meta.env.DEV) return
+  const normalized = (materialName ?? '').trim()
+  if (!normalized || loggedUnmatchedMaterialNames.has(normalized)) return
+  loggedUnmatchedMaterialNames.add(normalized)
+  console.debug('[deviceTextures] Unmatched material name, defaulting to recycledPlastic:', normalized)
 }
 
 /** Outer shell / case plastics (frosted acrylic look + translucency). */
@@ -77,6 +76,8 @@ export function isCaseShellMaterial(materialName) {
  */
 export function getDeviceTextureProfile(materialName) {
   const n = (materialName ?? '').trim()
+  const isNeoPixelLedMaterial = /^neopixel[_\s-]*led(?:\.\d+)?$/i.test(n)
+  const isLampMaterial = /^lamp(?:\.\d+)?$/i.test(n)
   if (n === 'Screen') return null
   if (isCaseShellMaterial(n)) return 'frostedAcrylic'
   if (n === 'Copper') return 'copper'
@@ -84,13 +85,32 @@ export function getDeviceTextureProfile(materialName) {
   if (n.includes('Stainless Steel')) return 'brushedAluminum'
   if (n === 'Gray Plastic (Plastic)') return 'grayPlastic'
   if (n === 'Led strip') return 'ledStrip'
+  if (isNeoPixelLedMaterial) return 'ledStrip'
+  if (isLampMaterial) return 'ledStrip'
   if (n === 'Material') return 'material6'
   if (n === 'Material_4' || n === 'Material_5' || n === 'Material_9') return 'untitledPlastic'
   if (n === 'Solder') return 'grayPlastic'
-  if (n === 'Lamp') return 'ledStrip'
   if (n === 'Nylon' || n === 'Rubber') return 'recycledPlastic'
   if (n === 'Neon Plexi Orange by LP') return 'recycledPlastic'
+  logUnmatchedMaterialName(n)
   return 'recycledPlastic'
+}
+
+/**
+ * Force specific mesh groups onto known profiles regardless of source material.
+ * This is useful for GLB exports where screws share inconsistent material names.
+ *
+ * @param {string} meshName
+ * @returns {string | null}
+ */
+export function getForcedMeshTextureProfile(meshName) {
+  const n = (meshName ?? '').trim().toLowerCase()
+  if (!n) return null
+  if (n === 'proto_board') return 'blackBoard'
+  if (n.startsWith('neopixel_strip')) return 'ledDiffuser'
+  if (n.startsWith('neopixel_led')) return 'ledEmitter'
+  if (n.includes('screw')) return 'untitledPlastic'
+  return null
 }
 
 function isPbrMaterial(material) {
@@ -142,7 +162,7 @@ function applyCaseShellTranslucency(material, materialName, caseTone = 'auto') {
     material.transparent = true
     /* Light frosted: lower opacity = more see-through. Black “smoked”: darker base + ~0.38–0.48
        opacity reads translucent without turning muddy like mid-gray + alpha. */
-    material.opacity = isDarkShell ? 0.44 : 0.52
+    material.opacity = isDarkShell ? 1 : 0.52
     material.depthWrite = false
     material.depthTest = true
     material.alphaMap = null
@@ -189,11 +209,6 @@ export function configureLoadedDeviceTextures(textures) {
   prepTexture(textures.untitledNormal, 'linear')
   prepTexture(textures.untitledRough, 'data')
   prepTexture(textures.untitledMetal, 'data')
-  prepTexture(textures.ledBase, 'srgb')
-  prepTexture(textures.ledNormal, 'linear')
-  prepTexture(textures.ledMetal, 'data')
-  prepTexture(textures.ledRough, 'data')
-  prepTexture(textures.ledAlpha, 'data')
   prepTexture(textures.mat6, 'srgb')
 }
 
@@ -232,6 +247,22 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       material.metalnessMap = null
       material.metalness = 0.15
       material.roughness = 1
+      break
+    }
+    case 'blackBoard': {
+      material.map = null
+      material.normalMap = null
+      material.roughnessMap = null
+      material.metalnessMap = null
+      material.alphaMap = null
+      material.aoMap = null
+      material.color = new THREE.Color('#0a0a0b')
+      material.emissive = new THREE.Color('#000000')
+      material.emissiveMap = null
+      material.metalness = 0.02
+      material.roughness = 0.86
+      material.envMapIntensity = 0.22
+      if ('specularIntensity' in material) material.specularIntensity = 0.18
       break
     }
     case 'whitePlastic': {
@@ -279,16 +310,77 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       break
     }
     case 'ledStrip': {
-      material.map = textures.ledBase
-      material.normalMap = textures.ledNormal
-      material.metalnessMap = textures.ledMetal
-      material.roughnessMap = textures.ledRough
-      material.alphaMap = textures.ledAlpha
-      material.metalness = 1
-      material.roughness = 1
-      material.transparent = true
+      material.map = null
+      material.normalMap = null
+      material.metalnessMap = null
+      material.roughnessMap = null
+      material.alphaMap = null
+      material.aoMap = null
+      material.color = new THREE.Color('#ffe8bf')
+      material.emissive = new THREE.Color('#ffbf69')
+      material.emissiveMap = null
+      material.emissiveIntensity = 2.1
+      material.metalness = 0.04
+      material.roughness = 0.3
+      material.transparent = false
       material.depthWrite = true
-      material.alphaTest = 0.02
+      material.alphaTest = 0
+      material.envMapIntensity = 0.35
+      break
+    }
+    case 'ledDiffuser': {
+      material.map = null
+      material.normalMap = null
+      material.metalnessMap = null
+      material.roughnessMap = null
+      material.alphaMap = null
+      material.aoMap = null
+      material.color = new THREE.Color('#fff7eb')
+      material.emissive = new THREE.Color('#ffd19a')
+      material.emissiveMap = null
+      material.emissiveIntensity = 0.18
+      material.metalness = 0
+      material.roughness = 0.22
+      material.envMapIntensity = 0.5
+      material.transparent = false
+      material.depthWrite = true
+      material.alphaTest = 0
+      if (material.isMeshPhysicalMaterial) {
+        material.transmission = 0.18
+        material.thickness = 0.08
+        material.ior = 1.46
+        material.attenuationColor = new THREE.Color('#ffe4bd')
+        material.attenuationDistance = 0.45
+        material.specularIntensity = 0.8
+        material.clearcoat = 0.08
+        material.clearcoatRoughness = 0.3
+      }
+      break
+    }
+    case 'ledEmitter': {
+      material.map = null
+      material.normalMap = null
+      material.metalnessMap = null
+      material.roughnessMap = null
+      material.alphaMap = null
+      material.aoMap = null
+      material.color = new THREE.Color('#ffebc9')
+      material.emissive = new THREE.Color('#ffc978')
+      material.emissiveMap = null
+      material.emissiveIntensity = 1.35
+      material.metalness = 0
+      material.roughness = 0.1
+      material.envMapIntensity = 0.2
+      material.transparent = false
+      material.depthWrite = true
+      material.alphaTest = 0
+      if ('toneMapped' in material) material.toneMapped = false
+      if (material.isMeshPhysicalMaterial) {
+        material.transmission = 0
+        material.thickness = 0
+        material.specularIntensity = 0.45
+        material.clearcoat = 0
+      }
       break
     }
     case 'material6': {

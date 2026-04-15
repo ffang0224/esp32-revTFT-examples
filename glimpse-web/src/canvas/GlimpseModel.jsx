@@ -16,6 +16,7 @@ import {
   applyDeviceTextureProfile,
   configureLoadedDeviceTextures,
   getDeviceTextureProfile,
+  getForcedMeshTextureProfile,
 } from './deviceTextures'
 import { configureEInkStoryTexture } from './eInkScreenTexture'
 
@@ -28,6 +29,7 @@ const DEFAULT_FLOAT_AMPLITUDE = 0.028
 const ASSEMBLY_FLOAT_AMPLITUDE = 0.014
 
 const tmpBox = new THREE.Box3()
+const tmpLedBox = new THREE.Box3()
 const tmpVecA = new THREE.Vector3()
 const tmpVecC = new THREE.Vector3()
 const tmpEuler = new THREE.Euler()
@@ -105,6 +107,26 @@ function isCaseEInkScreenMesh(mesh) {
   const name = (mesh.name ?? '').toLowerCase()
   const parentName = (mesh.parent?.name ?? '').toLowerCase()
   return name === 'screen' || parentName === 'screen'
+}
+
+function isLedNodeName(name = '') {
+  return /^neopixel_(strip|led)/u.test(name)
+}
+
+function getLedLightPosition(modelScene) {
+  modelScene.updateMatrixWorld(true)
+
+  const ledBounds = new THREE.Box3().makeEmpty()
+  modelScene.traverse((node) => {
+    if (!node.isMesh || !isLedNodeName(node.name ?? '')) return
+    node.geometry?.computeBoundingBox?.()
+    if (!node.geometry?.boundingBox) return
+    tmpLedBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld)
+    ledBounds.union(tmpLedBox)
+  })
+
+  if (ledBounds.isEmpty()) return null
+  return ledBounds.getCenter(new THREE.Vector3())
 }
 
 /**
@@ -197,12 +219,19 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
     const animatedGroups = []
     const assemblyMaterials = []
     const clonedMaterials = []
+    const ledLight = new THREE.PointLight('#ffd39a', 4.8, 2.8, 2)
+    const ledLightPosition = getLedLightPosition(modelScene)
+    if (ledLightPosition) {
+      ledLight.position.copy(ledLightPosition)
+      modelScene.add(ledLight)
+    }
 
-    function cloneMaterial(material, partId) {
+    function cloneMaterial(material, partId, meshName) {
       const cloned = material.clone()
       if (cloned.map) cloned.map.colorSpace = THREE.SRGBColorSpace
       if (cloned.emissiveMap) cloned.emissiveMap.colorSpace = THREE.SRGBColorSpace
-      const profile = getDeviceTextureProfile(material.name)
+      const forcedProfile = getForcedMeshTextureProfile(meshName)
+      const profile = forcedProfile ?? getDeviceTextureProfile(material.name)
       if (profile) applyDeviceTextureProfile(cloned, profile, deviceTextures, material.name)
       cloned.needsUpdate = true
       clonedMaterials.push(cloned)
@@ -234,9 +263,9 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
         node.renderOrder = 10
         node.material = screenMat
       } else if (Array.isArray(node.material)) {
-        node.material = node.material.map((material) => cloneMaterial(material, meshPartId))
+        node.material = node.material.map((material) => cloneMaterial(material, meshPartId, node.name))
       } else if (node.material) {
-        node.material = cloneMaterial(node.material, meshPartId)
+        node.material = cloneMaterial(node.material, meshPartId, node.name)
       }
     })
 
@@ -246,6 +275,7 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
     invalidate()
 
     return () => {
+      if (ledLight.parent) ledLight.parent.remove(ledLight)
       screenMaterialRef.current = null
       animatedGroupsRef.current = []
       assemblyMaterialsRef.current = []

@@ -9,6 +9,7 @@ import {
   applyDeviceTextureProfile,
   configureLoadedDeviceTextures,
   getDeviceTextureProfile,
+  getForcedMeshTextureProfile,
 } from './deviceTextures'
 import { configureEInkStoryTexture } from './eInkScreenTexture'
 import { getExplorerPartId } from './explorerPartGroups'
@@ -22,6 +23,7 @@ const EXPLORER_SCREEN_YAW = Math.PI
 const EXPLORER_UPRIGHT_PITCH = Math.PI
 
 const tmpBox = new THREE.Box3()
+const tmpLedBox = new THREE.Box3()
 
 function isExcludedFitNode(node) {
   const name = node.name ?? ''
@@ -40,9 +42,29 @@ function isCaseEInkScreenMesh(mesh) {
   return name === 'screen' || parentName === 'screen'
 }
 
+function isLedNodeName(name = '') {
+  return /^neopixel_(strip|led)/u.test(name)
+}
+
+function getLedLightPosition(modelScene) {
+  modelScene.updateMatrixWorld(true)
+
+  const ledBounds = new THREE.Box3().makeEmpty()
+  modelScene.traverse((node) => {
+    if (!node.isMesh || !isLedNodeName(node.name ?? '')) return
+    node.geometry?.computeBoundingBox?.()
+    if (!node.geometry?.boundingBox) return
+    tmpLedBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld)
+    ledBounds.union(tmpLedBox)
+  })
+
+  if (ledBounds.isEmpty()) return null
+  return ledBounds.getCenter(new THREE.Vector3())
+}
+
 function applyExplorerVisibility(modelScene, partVisibility) {
   modelScene.traverse((node) => {
-    if (!node.isMesh) return
+    if (!node.isMesh && !node.isLight) return
     const id = node.userData.explorerPartId ?? 'other'
     node.visible = partVisibility[id] !== false
   })
@@ -108,12 +130,20 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark'
     screenMat.needsUpdate = true
 
     const clonedMaterials = []
+    const ledLight = new THREE.PointLight('#ffd39a', 4.8, 2.8, 2)
+    const ledLightPosition = getLedLightPosition(modelScene)
+    if (ledLightPosition) {
+      ledLight.position.copy(ledLightPosition)
+      ledLight.userData.explorerPartId = 'led'
+      modelScene.add(ledLight)
+    }
 
-    function cloneMaterial(material) {
+    function cloneMaterial(material, meshName) {
       const cloned = material.clone()
       if (cloned.map) cloned.map.colorSpace = THREE.SRGBColorSpace
       if (cloned.emissiveMap) cloned.emissiveMap.colorSpace = THREE.SRGBColorSpace
-      const profile = getDeviceTextureProfile(material.name)
+      const forcedProfile = getForcedMeshTextureProfile(meshName)
+      const profile = forcedProfile ?? getDeviceTextureProfile(material.name)
       if (profile) {
         applyDeviceTextureProfile(cloned, profile, deviceTextures, material.name, caseTone)
       }
@@ -131,15 +161,16 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'dark'
         node.renderOrder = 10
         node.material = screenMat
       } else if (Array.isArray(node.material)) {
-        node.material = node.material.map((material) => cloneMaterial(material))
+        node.material = node.material.map((material) => cloneMaterial(material, node.name))
       } else if (node.material) {
-        node.material = cloneMaterial(node.material)
+        node.material = cloneMaterial(node.material, node.name)
       }
     })
 
     invalidate()
 
     return () => {
+      if (ledLight.parent) ledLight.parent.remove(ledLight)
       clonedMaterials.forEach((material) => material.dispose())
       screenMat.dispose()
     }
