@@ -136,12 +136,14 @@ export function getDeviceTextureProfile(materialName) {
  * @returns {string | null}
  */
 export function getForcedMeshTextureProfile(meshName) {
+  console.log('getForcedMeshTextureProfile', meshName)
   const n = (meshName ?? '').trim().toLowerCase()
   if (!n) return null
-  if (/^e_ink_screen\.(?:0?38|0?39)$/u.test(n)) return 'blackBoard'
+  if (n === 'e_ink_screen038' || n === 'e_ink_screen039') return 'blackBoard'
   if (n.startsWith('vibration_')) return 'brushedAluminum'
-  if (n === 'typec_port.003' || n === 'typec_port_003') return 'whitePlastic'
+  if (n === 'typeC_port003' || n === 'typec_port_003') return 'whitePlastic'
   if (/^case_(upper|lower)(?:\.\d+)?$/u.test(n)) return 'frostedAcrylic'
+  if (n === 'board171') return 'whitePlastic'
   if (n === 'proto_board' || /^board(?:\.\d+)?$/u.test(n)) return 'blackBoard'
   if (n.startsWith('neopixel_strip')) return 'ledDiffuser'
   if (n.startsWith('neopixel_led')) return 'ledEmitter'
