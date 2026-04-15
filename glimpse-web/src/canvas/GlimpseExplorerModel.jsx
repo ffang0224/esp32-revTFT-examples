@@ -23,7 +23,6 @@ const EXPLORER_SCREEN_YAW = Math.PI
 const EXPLORER_UPRIGHT_PITCH = Math.PI
 
 const tmpBox = new THREE.Box3()
-const tmpLedBox = new THREE.Box3()
 
 function isExcludedFitNode(node) {
   const name = node.name ?? ''
@@ -40,10 +39,6 @@ function isCaseEInkScreenMesh(mesh) {
   const name = (mesh.name ?? '').toLowerCase()
   const parentName = (mesh.parent?.name ?? '').toLowerCase()
   return name === 'screen' || parentName === 'screen'
-}
-
-function isLedNodeName(name = '') {
-  return /^neopixel_(strip|led)/iu.test(name)
 }
 
 function applyDirectVibrationOverride(material, meshName) {
@@ -85,22 +80,6 @@ function applyDirectVibrationOverride(material, meshName) {
   }
   material.needsUpdate = true
   return true
-}
-
-function getLedLightPosition(modelScene) {
-  modelScene.updateMatrixWorld(true)
-
-  const ledBounds = new THREE.Box3().makeEmpty()
-  modelScene.traverse((node) => {
-    if (!node.isMesh || !isLedNodeName(node.name ?? '')) return
-    node.geometry?.computeBoundingBox?.()
-    if (!node.geometry?.boundingBox) return
-    tmpLedBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld)
-    ledBounds.union(tmpLedBox)
-  })
-
-  if (ledBounds.isEmpty()) return null
-  return ledBounds.getCenter(new THREE.Vector3())
 }
 
 function applyExplorerVisibility(modelScene, partVisibility) {
@@ -171,13 +150,6 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'light
     screenMat.needsUpdate = true
 
     const clonedMaterials = []
-    const ledLight = new THREE.PointLight('#ffd39a', 3.2, 2.8, 2)
-    const ledLightPosition = getLedLightPosition(modelScene)
-    if (ledLightPosition) {
-      ledLight.position.copy(ledLightPosition)
-      ledLight.userData.explorerPartId = 'led'
-      modelScene.add(ledLight)
-    }
 
     function cloneMaterial(material, meshName) {
       const cloned = material.clone()
@@ -215,7 +187,6 @@ export default function GlimpseExplorerModel({ partVisibility, caseTone = 'light
     invalidate()
 
     return () => {
-      if (ledLight.parent) ledLight.parent.remove(ledLight)
       clonedMaterials.forEach((material) => material.dispose())
       screenMat.dispose()
     }

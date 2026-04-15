@@ -29,7 +29,6 @@ const DEFAULT_FLOAT_AMPLITUDE = 0.028
 const ASSEMBLY_FLOAT_AMPLITUDE = 0.014
 
 const tmpBox = new THREE.Box3()
-const tmpLedBox = new THREE.Box3()
 const tmpVecA = new THREE.Vector3()
 const tmpVecC = new THREE.Vector3()
 const tmpEuler = new THREE.Euler()
@@ -109,10 +108,6 @@ function isCaseEInkScreenMesh(mesh) {
   return name === 'screen' || parentName === 'screen'
 }
 
-function isLedNodeName(name = '') {
-  return /^neopixel_(strip|led)/iu.test(name)
-}
-
 function applyDirectVibrationOverride(material, meshName) {
   const n = (meshName ?? '').trim().toLowerCase()
   if (!n.startsWith('vibration_')) return false
@@ -152,22 +147,6 @@ function applyDirectVibrationOverride(material, meshName) {
   }
   material.needsUpdate = true
   return true
-}
-
-function getLedLightPosition(modelScene) {
-  modelScene.updateMatrixWorld(true)
-
-  const ledBounds = new THREE.Box3().makeEmpty()
-  modelScene.traverse((node) => {
-    if (!node.isMesh || !isLedNodeName(node.name ?? '')) return
-    node.geometry?.computeBoundingBox?.()
-    if (!node.geometry?.boundingBox) return
-    tmpLedBox.copy(node.geometry.boundingBox).applyMatrix4(node.matrixWorld)
-    ledBounds.union(tmpLedBox)
-  })
-
-  if (ledBounds.isEmpty()) return null
-  return ledBounds.getCenter(new THREE.Vector3())
 }
 
 /**
@@ -260,12 +239,6 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
     const animatedGroups = []
     const assemblyMaterials = []
     const clonedMaterials = []
-    const ledLight = new THREE.PointLight('#ffd39a', 3.2, 2.8, 2)
-    const ledLightPosition = getLedLightPosition(modelScene)
-    if (ledLightPosition) {
-      ledLight.position.copy(ledLightPosition)
-      modelScene.add(ledLight)
-    }
 
     function cloneMaterial(material, partId, meshName) {
       const cloned = material.clone()
@@ -326,7 +299,6 @@ export default function GlimpseModel({ staticOnly = false, internalsOnly = false
     invalidate()
 
     return () => {
-      if (ledLight.parent) ledLight.parent.remove(ledLight)
       screenMaterialRef.current = null
       animatedGroupsRef.current = []
       assemblyMaterialsRef.current = []

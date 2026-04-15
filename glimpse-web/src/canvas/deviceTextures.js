@@ -136,7 +136,6 @@ export function getDeviceTextureProfile(materialName) {
  * @returns {string | null}
  */
 export function getForcedMeshTextureProfile(meshName) {
-  console.log('getForcedMeshTextureProfile', meshName)
   const n = (meshName ?? '').trim().toLowerCase()
   if (!n) return null
   if (n === 'e_ink_screen038' || n === 'e_ink_screen039') return 'blackBoard'
@@ -413,6 +412,7 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       material.depthWrite = true
       material.alphaTest = 0
       material.envMapIntensity = 0.35
+      material.side = THREE.FrontSide
       break
     }
     case 'ledDiffuser': {
@@ -425,7 +425,8 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       material.color = new THREE.Color('#fff7eb')
       material.emissive = new THREE.Color('#ffd19a')
       material.emissiveMap = null
-      material.emissiveIntensity = 0.18
+      /* Keep diffuser mostly neutral so the underside does not look self-lit. */
+      material.emissiveIntensity = 0.00
       material.metalness = 0
       material.roughness = 0.22
       material.envMapIntensity = 0.5
@@ -454,13 +455,15 @@ export function applyDeviceTextureProfile(material, profile, textures, sourceMat
       material.color = new THREE.Color('#ffebc9')
       material.emissive = new THREE.Color('#ffc978')
       material.emissiveMap = null
-      material.emissiveIntensity = 1.35
+      /* Concentrate perceived light on LED emitters (exterior-facing chips). */
+      material.emissiveIntensity = 1.72
       material.metalness = 0
       material.roughness = 0.1
       material.envMapIntensity = 0.2
       material.transparent = false
       material.depthWrite = true
       material.alphaTest = 0
+      material.side = THREE.FrontSide
       if ('toneMapped' in material) material.toneMapped = false
       if (material.isMeshPhysicalMaterial) {
         material.transmission = 0

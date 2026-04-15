@@ -34,6 +34,11 @@
   overflow: hidden;
   border: 1px solid var(--border-dim);
   background: rgba(255, 255, 255, 0.35);
+  cursor: zoom-in;
+}
+
+.cellHero {
+  grid-column: 1 / -1;
 }
 
 .img {
@@ -48,3 +53,61 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Lightbox */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.88);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+
+.lbImg {
+  max-width: min(92vw, 1400px);
+  max-height: 90vh;
+  width: auto;
+  height: auto;
+  border-radius: 4px;
+  cursor: default;
+  object-fit: contain;
+}
+
+.lbClose,
+.lbPrev,
+.lbNext {
+  position: fixed;
+  background: none;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s;
+  line-height: 1;
+}
+
+.lbClose:hover,
+.lbPrev:hover,
+.lbNext:hover {
+  opacity: 1;
+}
+
+.lbClose {
+  top: 1.25rem;
+  right: 1.5rem;
+  font-size: 1.25rem;
+}
+
+.lbPrev,
+.lbNext {
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 3rem;
+  padding: 0 1rem;
+}
+
+.lbPrev { left: 0.5rem; }
+.lbNext { right: 0.5rem; }
