@@ -2,11 +2,11 @@
   position: relative;
   z-index: 10;
   background: var(--bg);
-  padding: clamp(5rem, 18vw, 10rem) 6vw;
+  padding: clamp(2.5rem, 8vw, 4.5rem) 6vw;
   pointer-events: auto;
   display: grid;
   place-items: center;
-  min-height: 42vh;
+  min-height: 24vh;
   text-align: center;
 }
 
