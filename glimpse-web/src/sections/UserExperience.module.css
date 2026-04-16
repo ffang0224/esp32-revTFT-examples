@@ -12,10 +12,11 @@
 }
 
 .copy {
-  max-width: 35rem;
+  width: 100%;
+  max-width: 1152px;
   display: grid;
   gap: 0.55rem;
-  margin-left: clamp(0.5rem, 4vw, 3rem);
+  margin: 0 auto;
 }
 
 .title {

@@ -13,11 +13,13 @@
 }
 
 .diagram {
+  max-width: 1152px;
   margin: 0;
   padding: 0;
   border: none;
   border-radius: 0;
   overflow: visible;
+  margin: 0 2.3rem;
   background: transparent;
 }
 

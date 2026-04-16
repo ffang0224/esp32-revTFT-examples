@@ -17,16 +17,17 @@
 .header {
   display: grid;
   gap: 1.35rem;
-  max-width: 37rem;
-  margin-left: clamp(0.5rem, 4vw, 3rem);
+  width: 100%;
+  max-width: 1152px;
+  margin: 0 auto;
 }
 
 .title {
   margin: 0;
   max-width: 15ch;
-  font-size: clamp(2.2rem, 4.6vw, 3.35rem);
-  line-height: 0.98;
-  letter-spacing: -0.055em;
+  font-size: clamp(1rem, 3vw, 2.25rem);
+  line-height: 1.16;
+  letter-spacing: -0.03em;
   font-weight: 600;
   color: var(--text);
 }
@@ -41,8 +42,9 @@
 .stage {
   position: relative;
   z-index: 1;
-  width: min(100%, calc(100% - clamp(0.5rem, 4vw, 3rem)));
-  margin: 1.5rem 0 1.5rem clamp(0.5rem, 4vw, 3rem);
+  width: 100%;
+  max-width: 1152px;
+  margin: 1.5rem auto;
   border-radius: 0;
   overflow: hidden;
   background:
@@ -87,8 +89,9 @@
 
 .toolbar {
   position: relative;
-  width: min(100%, calc(100% - clamp(0.5rem, 4vw, 3rem)));
-  margin: 0 0 0 clamp(0.5rem, 4vw, 3rem);
+  width: 100%;
+  max-width: 1152px;
+  margin: 0 auto;
   display: grid;
   gap: 0.6rem;
   pointer-events: auto;
