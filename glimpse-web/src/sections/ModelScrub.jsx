@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import styles from './ModelScrub.module.css'
 import { FRAME_COUNT } from '../ui/scrubFrames'
 
-const AUTO_LOOP_MS = 3200
+const AUTO_LOOP_MS = 2700
 const END_NUDGE_PX = 430
 const END_NUDGE_MS = 460
 

@@ -3,14 +3,14 @@
   min-height: clamp(18rem, 56vh, 30rem);
   display: grid;
   place-items: start center;
-  padding: clamp(12rem, 14vh, 8rem) 2rem clamp(1.5rem, 4vh, 3rem);
+  padding: clamp(17rem, 14vh, 0rem) 2rem clamp(1.5rem, 4vh, 3rem);
   z-index: 2;
   overflow: hidden;
   pointer-events: auto;
 }
 
 .content {
-  width: min(100%, 22rem);
+  width: min(100%, 35rem);
   display: grid;
   justify-items: center;
   gap: 1.1rem;
@@ -26,12 +26,12 @@
   font-weight: 800;
   letter-spacing: -0.03em;
   color: #101010;
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .sub {
-  max-width: 20rem;
-  font-size: clamp(0.95rem, 1.8vw, 1.2rem);
+  max-width: 40rem;
+  font-size: clamp(1.65rem, 1.8vw, 1.2rem);
   line-height: 1.2;
   color: rgba(16, 16, 16, 0.88);
 }
@@ -43,6 +43,6 @@
   }
 
   .sub {
-    max-width: 18rem;
+    max-width: 24rem;
   }
 }
