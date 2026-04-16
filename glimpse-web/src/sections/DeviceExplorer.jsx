@@ -89,35 +89,46 @@ export default function DeviceExplorer() {
             </Suspense>
           </Canvas>
           <p className={styles.canvasHint}>Drag to orbit · scroll to zoom</p>
-        </div>
-
-        <div className={styles.toolbar}>
-          <div className={styles.toolbarRow}>
-            <span className={styles.toolbarLabel} id="explorer-visibility-label">
-              Visibility
-            </span>
-          </div>
           <div
-            className={styles.toggles}
+            className={styles.toolbar}
             role="group"
             aria-labelledby="explorer-visibility-label"
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+            onWheel={(event) => event.stopPropagation()}
           >
-            <button
-              type="button"
-              className={`${styles.textToggle} ${showCase ? styles.textToggleOn : styles.textToggleOff}`}
-              aria-pressed={showCase}
-              onClick={() => setShowCase((prev) => !prev)}
-            >
-              Case
-            </button>
-            <button
-              type="button"
-              className={`${styles.textToggle} ${showInternals ? styles.textToggleOn : styles.textToggleOff}`}
-              aria-pressed={showInternals}
-              onClick={() => setShowInternals((prev) => !prev)}
-            >
-              Components
-            </button>
+            <div className={styles.toolbarRow}>
+              <span className={styles.toolbarLabel} id="explorer-visibility-label">
+                Visibility
+              </span>
+            </div>
+            <div className={styles.toggles}>
+              <button
+                type="button"
+                className={`${styles.textToggle} ${showCase ? styles.textToggleOn : styles.textToggleOff}`}
+                aria-pressed={showCase}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setShowCase((prev) => !prev)
+                }}
+              >
+                Case
+              </button>
+              <button
+                type="button"
+                className={`${styles.textToggle} ${showInternals ? styles.textToggleOn : styles.textToggleOff}`}
+                aria-pressed={showInternals}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setShowInternals((prev) => !prev)
+                }}
+              >
+                Components
+              </button>
+            </div>
           </div>
         </div>
       </div>

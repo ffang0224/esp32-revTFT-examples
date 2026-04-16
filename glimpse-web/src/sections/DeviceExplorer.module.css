@@ -2,13 +2,14 @@
   position: relative;
   z-index: 10;
   background: var(--bg);
-  padding: 0 clamp(1.25rem, 3vw, 2.25rem);
+  padding: 0 6vw;
   pointer-events: auto;
 }
 
 .inner {
-  max-width: 1360px;
-  margin: 0 auto;
+  width: min(100%, 1560px);
+  max-width: 1560px;
+  margin: 0;
   display: grid;
   gap: clamp(1.5rem, 3vw, 2rem);
 }
@@ -17,7 +18,7 @@
   display: grid;
   gap: 1.35rem;
   max-width: 37rem;
-  padding-left: clamp(0rem, 2vw, 1.75rem);
+  margin-left: clamp(0.5rem, 4vw, 3rem);
 }
 
 .title {
@@ -42,7 +43,7 @@
   position: relative;
   z-index: 1;
   width: 80%;
-  margin: 0 auto;
+  margin: 1.5rem auto;
   border-radius: 0;
   overflow: hidden;
   background:
@@ -86,10 +87,10 @@
 }
 
 .toolbar {
-  position: relative;
+  position: absolute;
+  left: clamp(1rem, 1.8vw, 1.6rem);
+  bottom: clamp(1rem, 1.8vw, 1.6rem);
   z-index: 5;
-  width: 80%;
-  margin: 0 auto;
   display: grid;
   gap: 0.6rem;
   pointer-events: auto;
@@ -165,7 +166,7 @@
 
   .header {
     gap: 1rem;
-    padding-left: 0;
+    margin-left: 0;
   }
 
   .title {
@@ -183,6 +184,8 @@
   }
 
   .toolbar {
+    left: 0.9rem;
+    bottom: 0.9rem;
     gap: 0.5rem;
   }
 

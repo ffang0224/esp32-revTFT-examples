@@ -40,7 +40,7 @@
   list-style: none;
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: clamp(0.9rem, 2vw, 1.35rem);
+  gap: clamp(0.45rem, 1vw, 0.8rem);
   margin: 0 auto;
   padding: 0;
   width: min(100%, 1152px);

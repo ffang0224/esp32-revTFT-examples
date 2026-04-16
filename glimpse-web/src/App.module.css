@@ -45,7 +45,7 @@
 .closingStatement {
   position: relative;
   z-index: 3;
-  padding: clamp(5rem, 14vw, 8rem) 6vw 0;
+  padding:0 6vw 0;
 }
 
 .closingStatementInner {
@@ -59,7 +59,7 @@
 
 .closingStatementText {
   margin: 0;
-  max-width: 24ch;
+  max-width: 34ch;
   font-weight: 500;
   letter-spacing: -0.03em;
   color: var(--text);
