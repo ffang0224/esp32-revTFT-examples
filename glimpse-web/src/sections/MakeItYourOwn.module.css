@@ -32,6 +32,7 @@
 .subtitle {
   margin: 0;
   font-size: clamp(0.5rem, 1.2vw, 1.5rem);
+  max-width: 50ch;
   line-height: 1.5;
   margin-bottom: 1.5rem;
   color: var(--text-dim);
