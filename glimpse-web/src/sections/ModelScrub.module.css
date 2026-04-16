@@ -1,4 +1,4 @@
-/* ── Scroll container — 300vh gives plenty of scrub room ── */
+/* ── Scroll container — tall track scrubs through frames ── */
 .section {
   position: relative;
   height: 300vh;
@@ -11,6 +11,7 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  height: 100dvh;
   width: 100%;
   overflow: hidden;
   background: #0e0e0e;
@@ -19,12 +20,13 @@
   justify-content: center;
 }
 
-/* ── Canvas frame — contain so nothing is cropped/offset ── */
+/* ── Canvas frame — cover + bias toward product; mobile recenters ── */
 .canvas {
   position: absolute;
   inset: 0;
   width: 105%;
   height: 100%;
+  max-width: none;
   object-fit: cover;
   object-position: 56% center;
   display: block;
@@ -96,11 +98,67 @@
 .hint {
   position: absolute;
   bottom: 2rem;
+  bottom: max(2rem, env(safe-area-inset-bottom, 0px));
   right: 2rem;
+  right: max(2rem, env(safe-area-inset-right, 0px));
   font-family: 'Instrument Sans', 'Helvetica Neue', sans-serif;
   font-size: 0.62rem;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.25);
   user-select: none;
+  pointer-events: none;
+  text-align: center;
+}
+
+.hintDesktop {
+  display: inline;
+}
+
+.hintMobile {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .section {
+    height: 240vh;
+    width: 100%;
+    max-width: 100%;
+    margin-left: 0;
+    overflow-x: clip;
+  }
+
+  .sticky {
+    max-width: 100%;
+  }
+
+  /* Narrower frame: full product in view, not edge-to-edge crop */
+  .canvas {
+    inset: auto;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: min(86%, calc(100vw - 1.5rem));
+    height: 100%;
+    transform: translateX(-50%);
+    object-fit: contain;
+    object-position: center center;
+  }
+
+  .hint {
+    left: 50%;
+    right: auto;
+    transform: translateX(-50%);
+    max-width: calc(100vw - 2rem);
+    font-size: 0.58rem;
+    letter-spacing: 0.14em;
+  }
+
+  .hintDesktop {
+    display: none;
+  }
+
+  .hintMobile {
+    display: inline;
+  }
 }

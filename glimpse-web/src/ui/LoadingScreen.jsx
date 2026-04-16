@@ -7,11 +7,13 @@ const MIN_DISPLAY_MS = 900
 export default function LoadingScreen({ onComplete, onFramesReady }) {
   const [progress, setProgress] = useState(0)
   const [exiting, setExiting] = useState(false)
-  const startTime = useRef(Date.now())
+  const startTime = useRef(0)
   const doneRef = useRef(false)
   const loadedRef = useRef(0)
 
   useEffect(() => {
+    startTime.current = Date.now()
+
     const finish = () => {
       if (doneRef.current) return
       doneRef.current = true
@@ -28,7 +30,9 @@ export default function LoadingScreen({ onComplete, onFramesReady }) {
 
     const images = FRAME_URLS.map((src) => {
       const img = new Image()
-      img.onload = () => {
+      img.decoding = 'async'
+
+      const onFrameSettled = () => {
         loadedRef.current += 1
         setProgress(loadedRef.current / FRAME_COUNT)
         if (loadedRef.current === FRAME_COUNT) {
@@ -36,10 +40,9 @@ export default function LoadingScreen({ onComplete, onFramesReady }) {
           finish()
         }
       }
-      img.onerror = () => {
-        loadedRef.current += 1
-        if (loadedRef.current === FRAME_COUNT) finish()
-      }
+
+      img.onload = onFrameSettled
+      img.onerror = onFrameSettled
       img.src = src
       return img
     })
@@ -47,7 +50,7 @@ export default function LoadingScreen({ onComplete, onFramesReady }) {
     // Hard fallback
     const fallback = setTimeout(finish, 8000)
     return () => clearTimeout(fallback)
-  }, [])
+  }, [onComplete, onFramesReady])
 
   return (
     <div className={`${styles.screen} ${exiting ? styles.out : ''}`}>

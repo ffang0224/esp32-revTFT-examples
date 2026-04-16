@@ -7,10 +7,12 @@ export default function ModelScrub({ frames }) {
   const canvasRef = useRef(null)
   const progressRef = useRef(null)
   const framesRef = useRef(frames)
+  const contextRef = useRef(null)
   const lastIndexRef = useRef(-1)
 
-  // Keep framesRef current without re-running effects
-  framesRef.current = frames
+  useEffect(() => {
+    framesRef.current = frames
+  }, [frames])
 
   // Draw frame 0 before paint the moment frames arrive
   useLayoutEffect(() => {
@@ -18,28 +20,40 @@ export default function ModelScrub({ frames }) {
     if (!canvas || !frames?.[0]) return
     canvas.width = frames[0].naturalWidth
     canvas.height = frames[0].naturalHeight
-    canvas.getContext('2d').drawImage(frames[0], 0, 0)
+    contextRef.current = canvas.getContext('2d')
+    contextRef.current?.drawImage(frames[0], 0, 0)
     lastIndexRef.current = 0
   }, [frames])
 
-  // Scroll handler — set up once, reads frames via ref
+  // Scroll handler — set up once, reads frames via framesRef
   useEffect(() => {
     const section = sectionRef.current
     const canvas = canvasRef.current
     if (!section || !canvas) return
 
-    const onScroll = () => {
+    if (!contextRef.current) {
+      contextRef.current = canvas.getContext('2d')
+    }
+
+    const viewportHeight = () =>
+      window.visualViewport?.height ?? window.innerHeight
+
+    let rafId = 0
+
+    const drawCurrentFrame = () => {
+      rafId = 0
       const f = framesRef.current
       if (!f) return
 
       const rect = section.getBoundingClientRect()
-      const scrollable = section.offsetHeight - window.innerHeight
+      const vh = viewportHeight()
+      const scrollable = Math.max(1, section.offsetHeight - vh)
       const progress = Math.max(0, Math.min(1, -rect.top / scrollable))
       const index = Math.min(Math.floor(progress * FRAME_COUNT), FRAME_COUNT - 1)
 
       if (index !== lastIndexRef.current) {
         lastIndexRef.current = index
-        canvas.getContext('2d').drawImage(f[index], 0, 0, canvas.width, canvas.height)
+        contextRef.current?.drawImage(f[index], 0, 0, canvas.width, canvas.height)
       }
 
       if (progressRef.current) {
@@ -47,8 +61,23 @@ export default function ModelScrub({ frames }) {
       }
     }
 
+    const onScroll = () => {
+      if (rafId) return
+      rafId = window.requestAnimationFrame(drawCurrentFrame)
+    }
+
+    drawCurrentFrame()
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    window.visualViewport?.addEventListener('resize', onScroll)
+    window.visualViewport?.addEventListener('scroll', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      window.visualViewport?.removeEventListener('resize', onScroll)
+      window.visualViewport?.removeEventListener('scroll', onScroll)
+      if (rafId) {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
   }, []) // empty — never re-runs, reads frames via framesRef
 
   return (
@@ -73,7 +102,10 @@ export default function ModelScrub({ frames }) {
         <div className={styles.progressBar}>
           <div ref={progressRef} className={styles.progressFill} />
         </div>
-        <p className={styles.hint}>scroll to rotate</p>
+        <p className={styles.hint}>
+          <span className={styles.hintDesktop}>scroll to rotate</span>
+          <span className={styles.hintMobile}>swipe to rotate</span>
+        </p>
       </div>
     </section>
   )

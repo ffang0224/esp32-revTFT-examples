@@ -1,16 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
 import { createPortal } from 'react-dom'
-import renderFront from '../../renders/front.png'
-import render45 from '../../renders/45 degrees.png'
 import renderBack from '../../renders/back.png'
+import renderIsometric from '../../renders/isometric.png'
 import renderLayered from '../../renders/layered.png'
 import styles from './Renders.module.css'
 
 const RENDERS = [
-  { src: renderLayered,   alt: 'Layered exploded view', hero: true },
-  { src: renderFront,     alt: 'Front view with e-ink display' },
-  { src: renderBack,      alt: 'Back view through frosted shell' },
-  { src: render45,        alt: '45° side view showing internals', hero: true },
+  { src: renderLayered, alt: 'Layered exploded view' },
+  { src: renderBack, alt: 'Back view through frosted shell' },
+  { src: renderIsometric, alt: 'Isometric device render' },
 ]
 
 export default function Renders() {
@@ -41,18 +39,16 @@ export default function Renders() {
   return (
     <>
       <section className={styles.section} id="renders" aria-label="Product renders">
-        <div className={styles.inner}>
-          <div className={styles.grid}>
-            {RENDERS.map((r, i) => (
-              <figure
-                key={r.src}
-                className={`${styles.cell}${r.hero ? ` ${styles.cellHero}` : ''}`}
-                onClick={() => setActive(i)}
-              >
-                <img src={r.src} alt={r.alt} className={styles.img} loading="lazy" />
-              </figure>
-            ))}
-          </div>
+        <div className={styles.stack}>
+          {RENDERS.map((r, i) => (
+            <figure
+              key={r.src}
+              className={styles.cell}
+              onClick={() => setActive(i)}
+            >
+              <img src={r.src} alt={r.alt} className={styles.img} loading="lazy" />
+            </figure>
+          ))}
         </div>
       </section>
 

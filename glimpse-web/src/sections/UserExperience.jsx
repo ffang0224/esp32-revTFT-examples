@@ -16,6 +16,12 @@ export default function UserExperience() {
   return (
     <section className={styles.section} id="user-experience" aria-label="User experience">
       <div className={styles.inner}>
+        <div className={styles.copy}>
+          <h2 className={styles.title}>Your decisions follow where you go. Glimpse does too.</h2>
+          <p className={styles.subtitle}>
+            Glimpse moves with you, with a companion app that deepens your decision-making process.
+          </p>
+        </div>
         <div className={styles.frame}>
           {showVideo ? (
             <video
