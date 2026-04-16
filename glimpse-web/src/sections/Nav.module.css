@@ -6,7 +6,7 @@
   z-index: 500;
   padding: 2rem 2.4rem;
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   pointer-events: auto;
   transition: opacity 0.3s, color 0.3s;
@@ -25,26 +25,6 @@
   width: auto;
   height: 2rem;
   display: block;
-}
-
-.links {
-  display: flex;
-  align-items: center;
-  gap: 2rem;
-  list-style: none;
-}
-
-.links a {
-  font-size: 0.68rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  text-decoration: none;
-  transition: color 0.3s;
-}
-
-.links a:hover {
-  color: var(--text);
 }
 
 .tryItButton {
@@ -69,14 +49,6 @@
   color: #111111;
 }
 
-.light .links a {
-  color: rgba(17, 17, 17, 0.74);
-}
-
-.light .links a:hover {
-  color: #111111;
-}
-
 .light .tryItButton {
   background: rgba(255, 255, 255, 0.86);
   color: #111111;
@@ -96,12 +68,6 @@
   .logoImage {
     height: 1.7rem;
   }
-
-  .links {
-    gap: 1rem;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
 }
 
 @media (max-width: 720px) {
@@ -111,9 +77,5 @@
 
   .logoImage {
     height: 1.5rem;
-  }
-
-  .links {
-    gap: 0.7rem;
   }
 }

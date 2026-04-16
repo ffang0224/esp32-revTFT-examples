@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useRef } from 'react'
 import styles from './ModelScrub.module.css'
 import { FRAME_COUNT } from '../ui/scrubFrames'
 
+const AUTO_LOOP_MS = 3200
+const END_NUDGE_PX = 430
+const END_NUDGE_MS = 460
+
 export default function ModelScrub({ frames }) {
   const sectionRef = useRef(null)
   const canvasRef = useRef(null)
@@ -9,10 +13,57 @@ export default function ModelScrub({ frames }) {
   const framesRef = useRef(frames)
   const contextRef = useRef(null)
   const lastIndexRef = useRef(-1)
+  const previousTimeRef = useRef(0)
+  const pauseAutoUntilRef = useRef(0)
+  const touchYRef = useRef(null)
+  const endNudgedRef = useRef(false)
+  const nudgeRafRef = useRef(0)
+  const nudgeStateRef = useRef(null)
 
   useEffect(() => {
     framesRef.current = frames
   }, [frames])
+
+  useEffect(() => {
+    const pauseAuto = () => {
+      pauseAutoUntilRef.current = performance.now() + 900
+    }
+
+    const onWheel = (event) => {
+      if (event.deltaY < 0) pauseAuto()
+    }
+
+    const onTouchStart = (event) => {
+      touchYRef.current = event.touches[0]?.clientY ?? null
+    }
+
+    const onTouchMove = (event) => {
+      const nextY = event.touches[0]?.clientY
+      if (touchYRef.current !== null && typeof nextY === 'number' && nextY > touchYRef.current) {
+        pauseAuto()
+      }
+      touchYRef.current = typeof nextY === 'number' ? nextY : touchYRef.current
+    }
+
+    const onTouchEnd = () => {
+      touchYRef.current = null
+    }
+
+    window.addEventListener('wheel', onWheel, { passive: true })
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: true })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
+
+    return () => {
+      if (nudgeRafRef.current) {
+        window.cancelAnimationFrame(nudgeRafRef.current)
+      }
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+    }
+  }, [])
 
   // Draw frame 0 before paint the moment frames arrive
   useLayoutEffect(() => {
@@ -25,7 +76,8 @@ export default function ModelScrub({ frames }) {
     lastIndexRef.current = 0
   }, [frames])
 
-  // Scroll handler — set up once, reads frames via framesRef
+  // Autoplay by advancing the actual page scroll while the scrub section is
+  // pinned, keeping the visible frame and scroll progress perfectly synced.
   useEffect(() => {
     const section = sectionRef.current
     const canvas = canvasRef.current
@@ -40,16 +92,88 @@ export default function ModelScrub({ frames }) {
 
     let rafId = 0
 
-    const drawCurrentFrame = () => {
-      rafId = 0
+    const stopNudge = () => {
+      if (nudgeRafRef.current) {
+        window.cancelAnimationFrame(nudgeRafRef.current)
+        nudgeRafRef.current = 0
+      }
+      nudgeStateRef.current = null
+    }
+
+    const startEndNudge = (targetTop) => {
+      stopNudge()
+      nudgeStateRef.current = {
+        from: window.scrollY,
+        target: targetTop,
+        start: performance.now(),
+      }
+
+      const animateNudge = (timestamp) => {
+        const state = nudgeStateRef.current
+        if (!state) return
+
+        const progress = Math.min(1, (timestamp - state.start) / END_NUDGE_MS)
+        const eased = 1 - ((1 - progress) ** 3)
+        const nextTop = state.from + (state.target - state.from) * eased
+
+        window.scrollTo({ top: nextTop, behavior: 'auto' })
+
+        if (progress < 1) {
+          nudgeRafRef.current = window.requestAnimationFrame(animateNudge)
+        } else {
+          nudgeRafRef.current = 0
+          nudgeStateRef.current = null
+        }
+      }
+
+      nudgeRafRef.current = window.requestAnimationFrame(animateNudge)
+    }
+
+    const drawCurrentFrame = (now) => {
       const f = framesRef.current
-      if (!f) return
+      if (!f) {
+        rafId = window.requestAnimationFrame(drawCurrentFrame)
+        return
+      }
+
+      if (!previousTimeRef.current) {
+        previousTimeRef.current = now
+      }
 
       const rect = section.getBoundingClientRect()
       const vh = viewportHeight()
       const scrollable = Math.max(1, section.offsetHeight - vh)
-      const progress = Math.max(0, Math.min(1, -rect.top / scrollable))
-      const index = Math.min(Math.floor(progress * FRAME_COUNT), FRAME_COUNT - 1)
+      const scrollProgress = Math.max(0, Math.min(1, -rect.top / scrollable))
+      const sectionStart = window.scrollY + rect.top
+      const sectionEnd = sectionStart + scrollable
+      const isActive = rect.top <= 0 && rect.bottom >= vh
+
+      if (isActive && scrollProgress < 1 && now >= pauseAutoUntilRef.current) {
+        const delta = now - previousTimeRef.current
+        const autoScrollDistance = (scrollable * delta) / AUTO_LOOP_MS
+        const nextScrollY = Math.min(sectionEnd, window.scrollY + autoScrollDistance)
+
+        if (nextScrollY > window.scrollY) {
+          window.scrollTo({ top: nextScrollY, behavior: 'auto' })
+        }
+      }
+
+      if (
+        isActive &&
+        scrollProgress >= 0.995 &&
+        !endNudgedRef.current &&
+        now >= pauseAutoUntilRef.current
+      ) {
+        endNudgedRef.current = true
+        startEndNudge(Math.min(sectionEnd + END_NUDGE_PX, window.scrollY + END_NUDGE_PX))
+      } else if (scrollProgress < 0.94) {
+        endNudgedRef.current = false
+        stopNudge()
+      }
+
+      previousTimeRef.current = now
+
+      const index = Math.min(Math.floor(scrollProgress * FRAME_COUNT), FRAME_COUNT - 1)
 
       if (index !== lastIndexRef.current) {
         lastIndexRef.current = index
@@ -57,23 +181,15 @@ export default function ModelScrub({ frames }) {
       }
 
       if (progressRef.current) {
-        progressRef.current.style.transform = `scaleX(${progress})`
+        progressRef.current.style.transform = `scaleX(${scrollProgress})`
       }
-    }
 
-    const onScroll = () => {
-      if (rafId) return
       rafId = window.requestAnimationFrame(drawCurrentFrame)
     }
 
-    drawCurrentFrame()
-    window.addEventListener('scroll', onScroll, { passive: true })
-    window.visualViewport?.addEventListener('resize', onScroll)
-    window.visualViewport?.addEventListener('scroll', onScroll)
+    rafId = window.requestAnimationFrame(drawCurrentFrame)
     return () => {
-      window.removeEventListener('scroll', onScroll)
-      window.visualViewport?.removeEventListener('resize', onScroll)
-      window.visualViewport?.removeEventListener('scroll', onScroll)
+      stopNudge()
       if (rafId) {
         window.cancelAnimationFrame(rafId)
       }

@@ -16,8 +16,10 @@
   overflow: hidden;
   background: #0e0e0e;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
+  padding-top: 50vh;
+  padding-top: 50dvh;
 }
 
 /* ── Canvas frame — cover + bias toward product; mobile recenters ── */
@@ -28,7 +30,7 @@
   height: 100%;
   max-width: none;
   object-fit: cover;
-  object-position: 56% center;
+  object-position: 56% 35%;
   display: block;
 }
 
@@ -130,6 +132,8 @@
 
   .sticky {
     max-width: 100%;
+    padding-top: 40vh;
+    padding-top: 40dvh;
   }
 
   /* Narrower frame: full product in view, not edge-to-edge crop */
@@ -142,7 +146,7 @@
     height: 100%;
     transform: translateX(-50%);
     object-fit: contain;
-    object-position: center center;
+    object-position: center 35%;
   }
 
   .hint {

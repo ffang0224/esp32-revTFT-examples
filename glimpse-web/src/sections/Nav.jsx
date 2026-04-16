@@ -16,33 +16,6 @@ export default function Nav({ lenisRef, hidden = false, light = false }) {
       <a href="#" className={styles.logo} onClick={(e) => handleClick(e, '#hero')}>
         <img src="/logotext.svg" alt="Glimpse" className={styles.logoImage} />
       </a>
-      <ul className={styles.links}>
-        <li>
-          <a href="#device-explorer" onClick={(e) => handleClick(e, '#device-explorer')}>
-            Explore
-          </a>
-        </li>
-        <li>
-          <a href="#user-experience" onClick={(e) => handleClick(e, '#user-experience')}>
-            Experience
-          </a>
-        </li>
-        <li>
-          <a href="#renders" onClick={(e) => handleClick(e, '#renders')}>
-            Renders
-          </a>
-        </li>
-        <li>
-          <a href="#specs" onClick={(e) => handleClick(e, '#specs')}>
-            Specs
-          </a>
-        </li>
-        <li>
-          <a href="#make-it-your-own" onClick={(e) => handleClick(e, '#make-it-your-own')}>
-            Yours
-          </a>
-        </li>
-      </ul>
     </nav>
   )
 }
