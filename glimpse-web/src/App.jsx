@@ -13,6 +13,7 @@ import Footer from './sections/Footer'
 import Cursor from './ui/Cursor'
 import LoadingScreen from './ui/LoadingScreen'
 import DemoOverlay from './DemoOverlay'
+import case5 from '../usecases/case5.png'
 
 import './styles/globals.css'
 import styles from './App.module.css'
@@ -106,6 +107,23 @@ export default function App() {
         <Specs />
         <DeviceExplorer />
         <MakeItYourOwn />
+        <section className={styles.closingStatement} aria-label="Closing statement">
+          <div className={styles.closingStatementInner}>
+            <p className={styles.closingStatementText}>
+              Good decisions don't come from pressure or guesswork - they come from listening to
+              yourself. Every choice is a step toward the person you're becoming.
+            </p>
+            <p className={styles.closingStatementText}>
+              Glimpse is there for all of them - personal, portable, and entirely your own.
+            </p>
+            <img
+              className={styles.closingStatementImage}
+              src={case5}
+              alt="Glimpse personalization example"
+              loading="lazy"
+            />
+          </div>
+        </section>
         <Closing />
 
         <Footer />

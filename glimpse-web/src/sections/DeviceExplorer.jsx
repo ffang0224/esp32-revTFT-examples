@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { Canvas, useThree } from '@react-three/fiber'
 import { Environment, OrbitControls } from '@react-three/drei'
 import * as THREE from 'three'
@@ -36,10 +36,8 @@ function ExplorerScene({ partVisibility, caseTone, controlsEnabled }) {
 }
 
 export default function DeviceExplorer() {
-  const stageRef = useRef(null)
   const [showCase, setShowCase] = useState(true)
   const [showInternals, setShowInternals] = useState(true)
-  const [controlsEnabled, setControlsEnabled] = useState(false)
 
   const partVisibility = useMemo(() => {
     const visibility = createDefaultExplorerVisibility()
@@ -49,37 +47,21 @@ export default function DeviceExplorer() {
     return visibility
   }, [showCase, showInternals])
 
-  useEffect(() => {
-    const stage = stageRef.current
-    if (!stage) return undefined
-
-    const stopStageWheelScroll = (event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      setControlsEnabled(true)
-    }
-
-    stage.addEventListener('wheel', stopStageWheelScroll, { passive: false })
-    return () => stage.removeEventListener('wheel', stopStageWheelScroll)
-  }, [])
-
   return (
     <section className={styles.section} id="device-explorer" aria-label="Explore the device">
       <div className={styles.inner}>
         <header className={styles.header}>
-          <h2 className={styles.kicker}>Explore</h2>
+          <h2 className={styles.title}>Look at it from every angle.</h2>
           <p className={styles.lede}>
-            Twist the model and see the device.
+            Just like the decisions it helps you make - Glimpse rewards a closer look. Turn it,
+            explore it, and find the perspective that feels right.
           </p>
         </header>
 
         <div
-          ref={stageRef}
           className={styles.stage}
           role="region"
           aria-label="Interactive 3D model — drag to rotate"
-          onPointerEnter={() => setControlsEnabled(true)}
-          onPointerDown={() => setControlsEnabled(true)}
         >
           <Canvas
             className={styles.canvas}
@@ -102,19 +84,14 @@ export default function DeviceExplorer() {
               <ExplorerScene
                 partVisibility={partVisibility}
                 caseTone="light"
-                controlsEnabled={controlsEnabled}
+                controlsEnabled
               />
             </Suspense>
           </Canvas>
           <p className={styles.canvasHint}>Drag to orbit · scroll to zoom</p>
         </div>
 
-        <div
-          className={styles.toolbar}
-          onPointerEnter={() => setControlsEnabled(false)}
-          onPointerDown={() => setControlsEnabled(false)}
-          onFocusCapture={() => setControlsEnabled(false)}
-        >
+        <div className={styles.toolbar}>
           <div className={styles.toolbarRow}>
             <span className={styles.toolbarLabel} id="explorer-visibility-label">
               Visibility
@@ -127,7 +104,7 @@ export default function DeviceExplorer() {
           >
             <button
               type="button"
-              className={`${styles.pill} ${showCase ? styles.pillOn : styles.pillOff}`}
+              className={`${styles.textToggle} ${showCase ? styles.textToggleOn : styles.textToggleOff}`}
               aria-pressed={showCase}
               onClick={() => setShowCase((prev) => !prev)}
             >
@@ -135,7 +112,7 @@ export default function DeviceExplorer() {
             </button>
             <button
               type="button"
-              className={`${styles.pill} ${showInternals ? styles.pillOn : styles.pillOff}`}
+              className={`${styles.textToggle} ${showInternals ? styles.textToggleOn : styles.textToggleOff}`}
               aria-pressed={showInternals}
               onClick={() => setShowInternals((prev) => !prev)}
             >
