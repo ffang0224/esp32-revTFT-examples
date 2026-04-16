@@ -24,6 +24,14 @@ export default function Nav({ lenisRef, hidden = false, light = false }) {
   const handleClick = (e, target) => {
     e.preventDefault()
     const lenis = lenisRef?.current
+    if (target === '#top') {
+      if (lenis) {
+        lenis.scrollTo(0, { immediate: true })
+      }
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+      return
+    }
+
     if (lenis) {
       lenis.scrollTo(target, { duration: 1.4 })
     } else {
@@ -33,7 +41,7 @@ export default function Nav({ lenisRef, hidden = false, light = false }) {
 
   return (
     <nav className={`${styles.nav} ${light ? styles.light : ''} ${hidden ? styles.hidden : ''}`}>
-      <a href="#" className={styles.logo} onClick={(e) => handleClick(e, '#hero')}>
+      <a href="#top" className={styles.logo} onClick={(e) => handleClick(e, '#top')}>
         <img
           src="/logotext.svg"
           alt="Glimpse"
