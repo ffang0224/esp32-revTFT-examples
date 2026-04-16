@@ -72,6 +72,7 @@ export default function ModelScrub({ frames }) {
     canvas.width = frames[0].naturalWidth
     canvas.height = frames[0].naturalHeight
     contextRef.current = canvas.getContext('2d')
+    contextRef.current?.clearRect(0, 0, canvas.width, canvas.height)
     contextRef.current?.drawImage(frames[0], 0, 0)
     lastIndexRef.current = 0
   }, [frames])
@@ -177,6 +178,7 @@ export default function ModelScrub({ frames }) {
 
       if (index !== lastIndexRef.current) {
         lastIndexRef.current = index
+        contextRef.current?.clearRect(0, 0, canvas.width, canvas.height)
         contextRef.current?.drawImage(f[index], 0, 0, canvas.width, canvas.height)
       }
 
@@ -215,13 +217,6 @@ export default function ModelScrub({ frames }) {
           </div>
         )}
 
-        <div className={styles.progressBar}>
-          <div ref={progressRef} className={styles.progressFill} />
-        </div>
-        <p className={styles.hint}>
-          <span className={styles.hintDesktop}>scroll to rotate</span>
-          <span className={styles.hintMobile}>swipe to rotate</span>
-        </p>
       </div>
     </section>
   )
