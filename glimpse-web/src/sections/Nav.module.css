@@ -19,12 +19,34 @@
   display: inline-flex;
   align-items: center;
   text-decoration: none;
+  position: relative;
+  height: 2rem;
 }
 
 .logoImage {
+  position: absolute;
+  left: 0;
+  top: 0;
   width: auto;
   height: 2rem;
   display: block;
+  transition: opacity 0.32s ease;
+}
+
+.logoVisible {
+  opacity: 1;
+}
+
+.logoHidden {
+  opacity: 0;
+}
+
+.logoText {
+  z-index: 2;
+}
+
+.logoMark {
+  z-index: 1;
 }
 
 .tryItButton {
@@ -68,6 +90,10 @@
   .logoImage {
     height: 1.7rem;
   }
+
+  .logo {
+    height: 1.7rem;
+  }
 }
 
 @media (max-width: 720px) {
@@ -76,6 +102,10 @@
   }
 
   .logoImage {
+    height: 1.5rem;
+  }
+
+  .logo {
     height: 1.5rem;
   }
 }

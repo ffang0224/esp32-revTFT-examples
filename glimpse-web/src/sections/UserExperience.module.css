@@ -12,7 +12,7 @@
 }
 
 .copy {
-  max-width: 42rem;
+  max-width: 35rem;
   display: grid;
   gap: 0.55rem;
   margin-left: clamp(0.5rem, 4vw, 3rem);
@@ -24,6 +24,7 @@
   line-height: 1.16;
   letter-spacing: -0.03em;
   font-weight: 500;
+  margin-bottom: 1.5rem;
   color: var(--text);
 }
 
@@ -31,6 +32,7 @@
   margin: 0;
   font-size: clamp(0.5rem, 1.2vw, 1.5rem);
   line-height: 1.5;
+  margin-bottom: 1.5rem;
   color: var(--text-dim);
 }
 

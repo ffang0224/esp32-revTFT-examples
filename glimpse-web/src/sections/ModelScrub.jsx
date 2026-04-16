@@ -3,8 +3,9 @@ import styles from './ModelScrub.module.css'
 import { FRAME_COUNT } from '../ui/scrubFrames'
 
 const AUTO_LOOP_MS = 2700
-const END_NUDGE_PX = 430
+const END_NUDGE_PX = 530
 const END_NUDGE_MS = 460
+const SCRUB_EXPOSURE = 1.27
 
 export default function ModelScrub({ frames }) {
   const sectionRef = useRef(null)
@@ -72,6 +73,9 @@ export default function ModelScrub({ frames }) {
     canvas.width = frames[0].naturalWidth
     canvas.height = frames[0].naturalHeight
     contextRef.current = canvas.getContext('2d')
+    if (contextRef.current) {
+      contextRef.current.filter = `brightness(${SCRUB_EXPOSURE})`
+    }
     contextRef.current?.clearRect(0, 0, canvas.width, canvas.height)
     contextRef.current?.drawImage(frames[0], 0, 0)
     lastIndexRef.current = 0
@@ -86,6 +90,9 @@ export default function ModelScrub({ frames }) {
 
     if (!contextRef.current) {
       contextRef.current = canvas.getContext('2d')
+    }
+    if (contextRef.current) {
+      contextRef.current.filter = `brightness(${SCRUB_EXPOSURE})`
     }
 
     const viewportHeight = () =>
