@@ -55,7 +55,6 @@ export default function LoadingScreen({ onComplete, onFramesReady }) {
   return (
     <div className={`${styles.screen} ${exiting ? styles.out : ''}`}>
       <div className={styles.inner}>
-        <p className={styles.wordmark}>Glimpse</p>
         <div className={styles.track}>
           <div
             className={styles.fill}

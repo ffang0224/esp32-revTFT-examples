@@ -10,3 +10,50 @@
   transform: scale(0.97);
   pointer-events: none;
 }
+
+.bridgeCopy {
+  position: relative;
+  z-index: 3;
+  padding: 5.5rem 6vw 7rem;
+}
+
+.bridgeCopyInner {
+  width: min(100%, 920px);
+  margin: 0;
+  margin-left: clamp(0.5rem, 4vw, 3rem);
+  display: grid;
+  gap: 1.5rem;
+  justify-items: start;
+  text-align: left;
+}
+
+.bridgeCopyLead,
+.bridgeCopyBody {
+  margin: 0;
+  max-width: 34ch;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  line-height: 1.16;
+}
+
+.bridgeCopyBody {
+  color: var(--text);
+}
+
+@media (max-width: 720px) {
+  .bridgeCopy {
+    padding: 4rem 1.25rem 5rem;
+  }
+
+  .bridgeCopyInner {
+    gap: 1rem;
+    margin-left: 0;
+  }
+
+  .bridgeCopyLead,
+  .bridgeCopyBody {
+    max-width: none;
+  }
+}

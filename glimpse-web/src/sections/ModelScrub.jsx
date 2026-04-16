@@ -130,6 +130,19 @@ export default function ModelScrub({ frames }) {
       nudgeRafRef.current = window.requestAnimationFrame(animateNudge)
     }
 
+    const getCenteredFollowupTop = () => {
+      const followupSection = section.nextElementSibling
+      if (!followupSection) return null
+
+      const focusTarget = followupSection.firstElementChild ?? followupSection
+      const vh = viewportHeight()
+      const targetRect = focusTarget.getBoundingClientRect()
+      const targetTop = window.scrollY + targetRect.top
+      const centeredTop = targetTop - ((vh - targetRect.height) / 2)
+
+      return Math.max(section.offsetTop, centeredTop)
+    }
+
     const drawCurrentFrame = (now) => {
       const f = framesRef.current
       if (!f) {
@@ -166,7 +179,9 @@ export default function ModelScrub({ frames }) {
         now >= pauseAutoUntilRef.current
       ) {
         endNudgedRef.current = true
-        startEndNudge(Math.min(sectionEnd + END_NUDGE_PX, window.scrollY + END_NUDGE_PX))
+        const centeredFollowupTop = getCenteredFollowupTop()
+        const fallbackTop = Math.min(sectionEnd + END_NUDGE_PX, window.scrollY + END_NUDGE_PX)
+        startEndNudge(centeredFollowupTop ?? fallbackTop)
       } else if (scrollProgress < 0.94) {
         endNudgedRef.current = false
         stopNudge()

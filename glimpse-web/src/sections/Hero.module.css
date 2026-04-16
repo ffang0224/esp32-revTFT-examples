@@ -17,20 +17,22 @@
   text-align: center;
   position: relative;
   z-index: 3;
+  transform: translateX(-5px);
 }
 
 .title {
-  font-size: clamp(2.6rem, 7vw, 3.6rem);
+  font-size: clamp(4rem, 12vw, 6.8rem);
   line-height: 1.05;
-  font-weight: 500;
+  font-weight: 800;
   letter-spacing: -0.03em;
   color: #101010;
+  margin-bottom: 1.5rem;
 }
 
 .sub {
   max-width: 20rem;
-  font-size: clamp(0.78rem, 1.35vw, 0.88rem);
-  line-height: 1.55;
+  font-size: clamp(0.95rem, 1.8vw, 1.2rem);
+  line-height: 1.2;
   color: rgba(16, 16, 16, 0.88);
 }
 

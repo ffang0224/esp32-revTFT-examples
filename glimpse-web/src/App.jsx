@@ -78,8 +78,31 @@ export default function App() {
         <Hero />
 
         <ModelScrub frames={scrubFrames} />
+        <section className={styles.bridgeCopy} aria-label="Decision making introduction">
+          <div className={styles.bridgeCopyInner}>
+            <p className={styles.bridgeCopyLead}>
+              Decisions rarely come easy. We overthink, hesitate, and slowly lose touch with
+              what we actually feel. Standing at a crossroads, unsure of what any direction
+              really holds.
+            </p>
+            <p className={styles.bridgeCopyBody}>
+              Glimpse meets you in that uncertainty - turning the decision-making process into
+              something tangible, offering a way to step briefly into what each choice could
+              become.
+            </p>
+          </div>
+        </section>
         <UserExperience />
         <Renders />
+        <section className={styles.bridgeCopy} aria-label="Product positioning">
+          <div className={styles.bridgeCopyInner}>
+            <p className={styles.bridgeCopyLead}>
+              Lightweight and portable, Glimpse is designed to fit naturally into the rhythm
+              of your life - and adapt to it. Customizable to the way you dress, the way you
+              feel, the way you decide.
+            </p>
+          </div>
+        </section>
         <Specs />
         <DeviceExplorer />
         <MakeItYourOwn />
