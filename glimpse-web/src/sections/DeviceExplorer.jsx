@@ -89,46 +89,37 @@ export default function DeviceExplorer() {
             </Suspense>
           </Canvas>
           <p className={styles.canvasHint}>Drag to orbit · scroll to zoom</p>
-          <div
-            className={styles.toolbar}
-            role="group"
-            aria-labelledby="explorer-visibility-label"
-            onPointerDown={(event) => event.stopPropagation()}
-            onPointerUp={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            onWheel={(event) => event.stopPropagation()}
-          >
-            <div className={styles.toolbarRow}>
-              <span className={styles.toolbarLabel} id="explorer-visibility-label">
-                Visibility
-              </span>
-            </div>
-            <div className={styles.toggles}>
-              <button
-                type="button"
-                className={`${styles.textToggle} ${showCase ? styles.textToggleOn : styles.textToggleOff}`}
-                aria-pressed={showCase}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setShowCase((prev) => !prev)
-                }}
-              >
+        </div>
+
+        <div className={styles.toolbar} role="group" aria-labelledby="explorer-visibility-label">
+          <div className={styles.toolbarRow}>
+            <span className={styles.toolbarLabel} id="explorer-visibility-label">
+              Visibility
+            </span>
+          </div>
+          <div className={styles.toggles}>
+            <label className={styles.toggleLabel}>
+              <input
+                className={styles.toggleInput}
+                type="checkbox"
+                checked={showCase}
+                onChange={(event) => setShowCase(event.target.checked)}
+              />
+              <span className={`${styles.textToggle} ${showCase ? styles.textToggleOn : styles.textToggleOff}`}>
                 Case
-              </button>
-              <button
-                type="button"
-                className={`${styles.textToggle} ${showInternals ? styles.textToggleOn : styles.textToggleOff}`}
-                aria-pressed={showInternals}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  setShowInternals((prev) => !prev)
-                }}
-              >
+              </span>
+            </label>
+            <label className={styles.toggleLabel}>
+              <input
+                className={styles.toggleInput}
+                type="checkbox"
+                checked={showInternals}
+                onChange={(event) => setShowInternals(event.target.checked)}
+              />
+              <span className={`${styles.textToggle} ${showInternals ? styles.textToggleOn : styles.textToggleOff}`}>
                 Components
-              </button>
-            </div>
+              </span>
+            </label>
           </div>
         </div>
       </div>

@@ -28,12 +28,11 @@
   line-height: 0.98;
   letter-spacing: -0.055em;
   font-weight: 600;
-  font-style: italic;
   color: var(--text);
 }
 
 .lede {
-  max-width: 30ch;
+  max-width: 50ch;
   font-size: clamp(1rem, 1.25vw, 1.15rem);
   line-height: 1.12;
   color: var(--text-dim);
@@ -42,8 +41,8 @@
 .stage {
   position: relative;
   z-index: 1;
-  width: 80%;
-  margin: 1.5rem auto;
+  width: min(100%, calc(100% - clamp(0.5rem, 4vw, 3rem)));
+  margin: 1.5rem 0 1.5rem clamp(0.5rem, 4vw, 3rem);
   border-radius: 0;
   overflow: hidden;
   background:
@@ -87,10 +86,9 @@
 }
 
 .toolbar {
-  position: absolute;
-  left: clamp(1rem, 1.8vw, 1.6rem);
-  bottom: clamp(1rem, 1.8vw, 1.6rem);
-  z-index: 5;
+  position: relative;
+  width: min(100%, calc(100% - clamp(0.5rem, 4vw, 3rem)));
+  margin: 0 0 0 clamp(0.5rem, 4vw, 3rem);
   display: grid;
   gap: 0.6rem;
   pointer-events: auto;
@@ -116,23 +114,31 @@
   pointer-events: auto;
 }
 
-.textToggle {
-  position: relative;
-  z-index: 6;
+.toggleLabel {
   display: inline-flex;
   align-items: center;
-  border: none;
-  background: transparent;
-  padding: 0.1rem 0;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggleInput {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  pointer-events: none;
+}
+
+.textToggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0;
   font-family: 'DM Mono', ui-monospace, monospace;
   font-size: clamp(1rem, 1.2vw, 1.15rem);
   line-height: 1;
   letter-spacing: 0.015em;
   text-transform: uppercase;
   color: rgba(17, 17, 17, 0.52);
-  cursor: pointer;
-  pointer-events: auto;
-  touch-action: manipulation;
   transition:
     color 0.2s,
     opacity 0.2s;
@@ -149,11 +155,11 @@
   opacity: 0.7;
 }
 
-.textToggle:hover {
+.toggleLabel:hover .textToggle {
   color: var(--text);
 }
 
-.textToggle:focus-visible {
+.toggleInput:focus-visible + .textToggle {
   outline: none;
   text-decoration: underline;
   text-underline-offset: 0.2em;
@@ -184,8 +190,7 @@
   }
 
   .toolbar {
-    left: 0.9rem;
-    bottom: 0.9rem;
+    width: 100%;
     gap: 0.5rem;
   }
 

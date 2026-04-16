@@ -129,7 +129,7 @@ export default function App() {
         <Footer />
       </main>
 
-      <DemoOverlay isOpen={isDemoOpen} onClose={closeDemo} />
+      {isDemoOpen ? <DemoOverlay isOpen={isDemoOpen} onClose={closeDemo} /> : null}
     </>
   )
 }
