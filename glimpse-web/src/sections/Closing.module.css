@@ -11,6 +11,7 @@
 }
 
 .line {
+  font-family: 'DM Mono', ui-monospace, monospace;
   font-size: clamp(1.15rem, 3.2vw, 1.85rem);
   font-weight: 500;
   letter-spacing: 0.02em;

@@ -2,3 +2,4 @@ rn-ble-test/.env
 rn-ble-test/node_modules
 lib
 .worktrees/
+glimpse-web/public/video.mov

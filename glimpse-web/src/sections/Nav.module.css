@@ -23,7 +23,7 @@
 
 .logoImage {
   width: auto;
-  height: 1.2rem;
+  height: 2rem;
   display: block;
 }
 
@@ -93,6 +93,10 @@
     padding: 1.4rem 1.5rem;
   }
 
+  .logoImage {
+    height: 1.7rem;
+  }
+
   .links {
     gap: 1rem;
     flex-wrap: wrap;
@@ -103,6 +107,10 @@
 @media (max-width: 720px) {
   .nav {
     padding: 1.2rem 1rem;
+  }
+
+  .logoImage {
+    height: 1.5rem;
   }
 
   .links {

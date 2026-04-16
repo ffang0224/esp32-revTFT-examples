@@ -101,7 +101,7 @@
   border-radius: 12px;
   padding: 0.9rem 1rem;
   color: var(--text);
-  font-family: 'Lora', Georgia, serif;
+  font-family: 'Instrument Sans', 'Helvetica Neue', sans-serif;
   font-size: 0.82rem;
   line-height: 1.7;
   resize: none;
@@ -129,7 +129,7 @@
   border: 1px solid var(--accent);
   background: transparent;
   color: var(--accent);
-  font-family: 'Lora', Georgia, serif;
+  font-family: 'Instrument Sans', 'Helvetica Neue', sans-serif;
   font-size: 0.78rem;
   letter-spacing: 0.06em;
   cursor: none;

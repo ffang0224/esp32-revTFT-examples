@@ -10,12 +10,3 @@
   transform: scale(0.97);
   pointer-events: none;
 }
-
-.divider {
-  position: relative;
-  z-index: 10;
-  height: 1px;
-  margin: 0 6vw;
-  background: linear-gradient(to right, transparent, var(--border), transparent);
-}
-

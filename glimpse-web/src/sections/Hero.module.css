@@ -1,9 +1,9 @@
 .hero {
   position: relative;
-  min-height: 100vh;
+  min-height: calc(100vh - 188px);
   display: grid;
   place-items: center;
-  padding: clamp(8rem, 22vh, 12rem) 2rem clamp(4rem, 12vh, 6rem);
+  padding: clamp(8rem, 22vh, 12rem) 2rem clamp(8rem, 22vh, 12rem);
   z-index: 2;
   overflow: hidden;
   pointer-events: auto;
