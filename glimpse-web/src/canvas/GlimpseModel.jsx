@@ -20,7 +20,7 @@ import {
 } from './deviceTextures'
 import { configureEInkStoryTexture } from './eInkScreenTexture'
 
-import caseGltfUrl from '../../case-only.glb?url'
+import caseGltfUrl from '../../case-only-optimized.glb?url'
 
 const TARGET_MODEL_MAX_DIMENSION = 10.4
 /** Y rotation (rad) after centering so the e-ink screen faces the camera (+Z). */
