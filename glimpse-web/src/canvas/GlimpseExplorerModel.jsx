@@ -14,7 +14,7 @@ import {
 import { configureEInkStoryTexture } from './eInkScreenTexture'
 import { getExplorerPartId } from './explorerPartGroups'
 
-import caseGltfUrl from '../../case-only-optimized.glb?url'
+import caseGltfUrl from '../../case-only.glb?url'
 
 const TARGET_MODEL_MAX_DIMENSION = 10.4
 /** Y rotation after Center + upright pitch — π faces opposite direction from 0. */

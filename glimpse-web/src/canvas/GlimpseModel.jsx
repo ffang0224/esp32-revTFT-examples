@@ -20,7 +20,7 @@ import {
 } from './deviceTextures'
 import { configureEInkStoryTexture } from './eInkScreenTexture'
 
-import caseGltfUrl from '../../case-only-optimized.glb?url'
+import caseGltfUrl from '../../case-only.glb?url'
 
 const TARGET_MODEL_MAX_DIMENSION = 10.4
 /** Y rotation (rad) after centering so the e-ink screen faces the camera (+Z). */
@@ -151,7 +151,7 @@ function applyDirectVibrationOverride(material, meshName) {
 
 /**
  * Hero “internals only”: hide outer shells + clip (everything else stays).
- * `case-only-optimized.glb` uses mesh names `case_upper` / `case_lower` (with suffixes); other exports may use
+ * `case-only.glb` uses mesh names `case_upper` / `case_lower` (with suffixes); other exports may use
  * `asm_*` assembly roots from `assemblyConfig`.
  */
 const INTERNALS_ONLY_HIDDEN_PARTS = new Set([
