@@ -13,7 +13,7 @@ import Footer from './sections/Footer'
 import Cursor from './ui/Cursor'
 import LoadingScreen from './ui/LoadingScreen'
 import DemoOverlay from './DemoOverlay'
-import case5 from '../usecases/case5.png'
+import case5 from '../usecases/case5.webp'
 
 import './styles/globals.css'
 import styles from './App.module.css'

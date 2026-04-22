@@ -6,7 +6,7 @@ export default function Specs() {
       <div className={styles.inner}>
         <figure className={styles.diagram}>
           <img
-            src="/glimpse-hardware-list.png"
+            src="/glimpse-hardware-list.webp"
             alt="Exploded hardware diagram: Glimpse components and assembly"
             className={styles.diagramImg}
             loading="lazy"

@@ -70,7 +70,7 @@ export default function AssemblyStory() {
       <div className={styles.viewport}>
         <img
           className={styles.diagram}
-          src="/glimpse-hardware-list.png"
+          src="/glimpse-hardware-list.webp"
           alt="Glimpse hardware list exploded view"
         />
       </div>

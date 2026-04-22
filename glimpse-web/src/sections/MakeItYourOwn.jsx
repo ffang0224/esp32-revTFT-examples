@@ -1,7 +1,7 @@
-import case1 from '../../usecases/case1.png'
-import case2 from '../../usecases/case2.png'
-import case3 from '../../usecases/case3.png'
-import case4 from '../../usecases/case4.png'
+import case1 from '../../usecases/case1.webp'
+import case2 from '../../usecases/case2.webp'
+import case3 from '../../usecases/case3.webp'
+import case4 from '../../usecases/case4.webp'
 import styles from './MakeItYourOwn.module.css'
 
 const USE_CASE_IMAGES = [
