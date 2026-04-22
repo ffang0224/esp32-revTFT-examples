@@ -151,7 +151,7 @@ function applyDirectVibrationOverride(material, meshName) {
 
 /**
  * Hero “internals only”: hide outer shells + clip (everything else stays).
- * `case-only.glb` uses mesh names `case_upper` / `case_lower` (with suffixes); other exports may use
+ * `case-only-optimized.glb` uses mesh names `case_upper` / `case_lower` (with suffixes); other exports may use
  * `asm_*` assembly roots from `assemblyConfig`.
  */
 const INTERNALS_ONLY_HIDDEN_PARTS = new Set([
