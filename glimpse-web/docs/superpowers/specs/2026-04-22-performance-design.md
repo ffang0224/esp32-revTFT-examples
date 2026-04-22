@@ -80,6 +80,18 @@ Install: `npm install -D vite-plugin-compression`
 
 ---
 
+## Section 3 — Optimized GLB
+
+### What
+
+Swap `case-only.glb` (20MB) for `case-only-optimized.glb` (1.7MB) — a 91% reduction. Both `GlimpseModel.jsx` and `GlimpseExplorerModel.jsx` import the GLB via `../../case-only.glb?url`; updating those two import paths is the full change.
+
+### Risk
+
+The optimized GLB must have identical mesh names and hierarchy for the existing animation, assembly, and explorer code to work. Visual QA and a quick smoke-test of the DeviceExplorer and AssemblyStory sections is required after the swap.
+
+---
+
 ## Out of Scope
 
 - Scrub frame optimization (frames are already lean at 1.7MB / 80 frames)
@@ -92,6 +104,7 @@ Install: `npm install -D vite-plugin-compression`
 ## Success Criteria
 
 - Usecase images total < 4MB (down from ~33MB)
+- `case-only.glb` replaced with `case-only-optimized.glb` (20MB → 1.7MB)
 - JS bundle produces separate `vendor-three` chunk in `dist/assets/`
 - Build output includes `.br` and `.gz` sidecar files
-- Visual output is unchanged — images pass eyeball check at full resolution
+- Visual output is unchanged — images and 3D model pass eyeball check; DeviceExplorer and AssemblyStory sections function correctly
